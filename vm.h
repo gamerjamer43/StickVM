@@ -1,8 +1,7 @@
 /**
- * this header contains the main portion of the vm, and in turn the VM struct
- * will document this more when i have time
- *
- * Author: Noah Mingolelli
+ * @file vm.h
+ * @author Noah Mingolelli
+ * @brief this header contains the main portion of the vm, and in turn the VM struct
  * License: GPLv3
  */
 
@@ -16,10 +15,6 @@
 
 #include "typing.h"
 #include "opcodes.h"
-
-// ---------------------------
-// Instruction packing helpers
-// ---------------------------
 
 // pack instructions (shift everything to its proper location)
 static inline Instruction instr_pack(uint8_t op, uint8_t a, uint8_t b, uint8_t c) {

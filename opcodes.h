@@ -1,6 +1,9 @@
 /**
- * the opcode table is so long that i wanted to make a sep file
- * read what each one does and how i have it laid out
+ * @file opcodes.h
+ * @author Noah Mingolelli
+ * @brief the opcode table is so long that i wanted to make a sep file
+ *
+ * read what each one does and how i have it laid out. i commented under each to avoid a giant docstring.
  */
 
 #ifndef OPCODES_H
