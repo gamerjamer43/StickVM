@@ -7,6 +7,7 @@
  *
  *
  * Instruction -> uint32_t (to use fixed 32 bit packed ints for instructions)
+ * IField      -> uint8_t  (to extract specific fields from the packed instruction)
  *
  * ValueType -> enum       (primitive type spec, read through to see all the primitives)
  * FuncType -> enum        (2 options, NATIVE function from C, or a normal BYTECODE function)
@@ -30,12 +31,12 @@
  *
  * BytecodeFunc -> struct, fields:
  * - uint32_t entry_ip;    (instruction index where function starts)
- * - uint16_t arity;       (number of arguments)
- * - uint16_t nregs;       (number of registers needed)
+ * - uint16_t argc;        (number of arguments)
+ * - uint16_t regc;        (number of registers needed)
  *
  * NativeFunc -> struct, fields:
  * - NativeFn fn;          (pointer to the C native function)
- * - uint16_t arity;       (number of arguments)
+ * - uint16_t argc;        (number of arguments)
  * - uint16_t _pad;        (padding for alignment)
  */
 
@@ -47,6 +48,9 @@
 
 // instructions are 32 bit packed. (opcode << 24 | src0 << 16 | src1 << 8 | src2 << 0)
 typedef uint32_t Instruction;
+
+// so specific fields are 8 bit
+typedef uint8_t IField;
 
 // enum type listing up here
 typedef enum ValueType {
@@ -80,31 +84,32 @@ typedef struct Value {
         uint64_t u;
         float    f;
         double   d;
-        Func*    f;
-        void*    o;  // points to the objects location on the heap
+        Func*    fn;
+        void*    obj;  // points to the objects location on the heap
     } as;
-};
+} Value;
 
+
+// this has to be above the funcs ig
+// forward decl so NativeFn can take VM*
+typedef struct VM VM;
+
+// allow C natives (pointer to a function that takes these args, this is a feature of the language)
+// to be properly passed to value
+typedef Value (*NativeFn)(VM* vm, Value* args, uint16_t argc);
 
 // function types
 typedef struct {
     uint32_t entry_ip;  // instruction index
-    uint16_t arity;     // how many args this takes
-    uint16_t nregs;     // how many registers this call needs when it runs
+    uint16_t argc;      // how many args this takes
+    uint16_t regc;      // how many registers this call needs when it runs
 } BytecodeFunc;
 
 typedef struct {
     NativeFn  fn;       // pointer to the C native function
-    uint16_t  arity;    // how many args this takes
+    uint16_t  argc;     // how many args this takes
     uint16_t  _pad;     // keep alignment nice
 } NativeFunc;
-
-
-// forward decl so NativeFn can take VM*
-struct VM;
-
-// allow native fn to be properly passed to value
-typedef Value (*NativeFn)(struct VM* vm, Value* args, uint16_t argc);
 
 // properly resolve both bytecode and native functions as callables
 typedef struct Func {

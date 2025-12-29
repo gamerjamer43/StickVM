@@ -1,0 +1,8 @@
+# idk why make generates .d
+*.d
+
+# and bins/swaps/static/dynamic libs
+*.o
+*.dll
+*.swp
+*.exe
