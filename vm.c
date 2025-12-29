@@ -49,8 +49,15 @@ void vm_free(VM* vm) {
 
 int main(int argc, char *argv[]) {
     VM vm;
+
+    // init (i have o3 on. this wont print if this dont work)
     vm_init(&vm);
+    printf("init successful");
+
+    // free
     vm_free(&vm);
-    
+    printf("free successful");
+
+    // no errors
     return 0;
 }

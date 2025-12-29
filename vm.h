@@ -66,6 +66,7 @@
 #define VM_H
 
 // c std headers
+#include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
@@ -164,8 +165,8 @@ bool vm_run(VM* vm);
 // helper for implicit falisness
 static inline bool value_truthy(VM* vm, Value v) {
     switch (v.type) {
-        case NUL:      return false;           // null always false
-        case BOOL:     return v.as.b;          // boolean do by value
+        case NUL:      return false;   // null always false
+        case BOOL:     return v.as.b;  // boolean do by value
 
         // any number check zero equality
         case I64:      return v.as.i   != 0;
