@@ -89,6 +89,20 @@ typedef struct Value {
     } as;
 } Value;
 
+// object types
+typedef struct Obj Obj; // dunno how to do this yet
+
+typedef struct {
+    size_t charc;  // c length - 1 to exclude null term
+    char* value[]; // string content
+} ObjStr;
+
+typedef struct {
+    size_t itemc;  // how many items are in the array
+    void* value[]; // whatever content the type has
+} ObjArray;
+
+typedef struct ObjTable ObjTable;  // write a hashtable impl for this
 
 // this has to be above the funcs ig
 // forward decl so NativeFn can take VM*

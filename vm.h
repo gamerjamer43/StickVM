@@ -19,6 +19,7 @@
  *
  * - Value* globals;             (globals storage)
  * - uint32_t globals_len;       (number of globals)
+ * - bool globals_owed;          (whether the VM owns the global pool; if true vm_free will free it)
  *
  * - Frame* frames;              (call stack array)
  * - uint32_t frame_count;       (current number of active frames)
@@ -71,30 +72,27 @@
 #include <stddef.h>
 #include <string.h>
 
+// remove with logging
+#include <inttypes.h>
+
 // my headers (also pulls in stdint and stdbool)
 #include "typing.h"
 #include "opcodes.h"
 
-// pack instructions (shift everything to its proper location) likely not needed as instructions should already be packed
+// pack instructions (shift everything to its proper location) only needed for testing cuz instructions will be packed
 // enum just acts as opcode spec, cuz it's enumerated
-// static inline Instruction instr_pack(uint8_t op, uint8_t a, uint8_t b, uint8_t c) {
-//     return ((uint32_t)op << 24) | ((uint32_t)a << 16) | ((uint32_t)b << 8) | ((uint32_t)c);
-// }
+static inline Instruction pack(uint8_t op, uint8_t a, uint8_t b, uint8_t c) {
+    return ((uint32_t)op << 24) | ((uint32_t)a << 16) | ((uint32_t)b << 8) | ((uint32_t)c);
+}
 
 // getters for each part of the instruction (simple bit shift & mask)
-static inline IField instr_op (Instruction ins) { return (uint8_t)((ins >> 24) & 0xFF); }
-static inline IField instr_a  (Instruction ins) { return (uint8_t)((ins >> 16) & 0xFF); }
-static inline IField instr_b  (Instruction ins) { return (uint8_t)((ins >>  8) & 0xFF); }
-static inline IField instr_c  (Instruction ins) { return (uint8_t)((ins >>  0) & 0xFF); }
+static inline IField opcode(Instruction ins) { return (uint8_t)((ins >> 24) & 0xFF); }
+static inline IField op_a  (Instruction ins) { return (uint8_t)((ins >> 16) & 0xFF); }
+static inline IField op_b  (Instruction ins) { return (uint8_t)((ins >>  8) & 0xFF); }
+static inline IField op_c  (Instruction ins) { return (uint8_t)((ins >>  0) & 0xFF); }
 
 // for JMP/JMPIF/JMPIFZ: signed offsets are in src1
-static inline int8_t instr_simm8_b(Instruction ins) { return (int8_t)instr_b(ins); }
-
-// object forward decls
-typedef struct Obj Obj;
-typedef struct ObjStr ObjStr;
-typedef struct ObjArray ObjArray;
-typedef struct ObjTable ObjTable;
+static inline int8_t instr_simm8_b(Instruction ins) { return (int8_t)op_b(ins); }
 
 // call frames
 typedef struct Frame {
