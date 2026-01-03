@@ -86,7 +86,7 @@ typedef enum {
 
     // strings
     CONCAT,    // dst = str(src1) + str(src2)
-    STRLEN,    // dst = length(str)
+    STRLEN,    // dst = length(str) MAY REMOVE TO TREAT STRINGS AS ARRAYS OF CHARS
 
     // conversions
     I2D,       // int to double. dst = (double)src1

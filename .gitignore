@@ -6,3 +6,6 @@
 *.dll
 *.swp
 *.exe
+
+# emitted bytecode
+*.stk

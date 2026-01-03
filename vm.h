@@ -8,23 +8,26 @@
  * manages Values, registers, globals, and call frames.
  *
  * VM -> struct, fields:
- * - const Instruction* istream; (pointer to active instruction stream)
+ * INSTRUCTIONS:
+ * - const Instruction* istream; (VM-owned instruction stream, decays to a pointer)
  * - uint32_t icount;            (number of instructions)
  * - const Value* consts;        (constant pool used by LOADI/LOADC)
  * - uint32_t constcount;        (length of constant pool)
- * - uint32_t ip;                (instruction pointer / index into code)
+ * - uint32_t ip;                (instruction pointer, just a flat index into the stream)
  *
+ * VALUE: just a typed container
  * - Value* regs;                (flat register array used by all frames)
  * - uint32_t regs_cap;          (capacity of regs array)
  *
+ * GLOBALS: vm always owns
  * - Value* globals;             (globals storage)
  * - uint32_t globals_len;       (number of globals)
- * - bool globals_owed;          (whether the VM owns the global pool; if true vm_free will free it)
  *
+ * FRAMES: all stack frames
  * - Frame* frames;              (call stack array)
  * - uint32_t frame_count;       (current number of active frames)
  * - uint32_t frame_cap;         (capacity of frames array)
- * - uint32_t panic_code;        (last error / panic code)
+ * - uint32_t panic_code;        (set on error (0 if no error))
  *
  *
  * Frame -> struct, fields:
@@ -36,7 +39,7 @@
  * API:
  * - void vm_init(VM* vm);       (initialize VM fields to safe defaults)
  * - void vm_free(VM* vm);       (release any allocated resources)
- * - void vm_load(               (load a compiled chunk ugly looking func)
+ * - void vm_load(               (load a compiled chunk; VM takes ownership of instruction stream)
  *          VM* vm,
  *          const Instruction* code, uint32_t code_len,
  *          const Value* consts, uint32_t consts_len,
@@ -46,7 +49,7 @@
  * - bool vm_call(VM* vm, Func* fn, Value* args, uint16_t argc, Value* out);  (invoke a callable; returns success)
  * - bool vm_run(VM* vm);                                                     (execute until HALT or PANIC; returns success)
  *
- * Helpers:
+ * HELPERS:
  * - instr_op/instr_a/instr_b/instr_c
  *   (extract packed instruction fields from Instruction)
  * - instr_simm8_b(Instruction)
@@ -54,7 +57,7 @@
  * - value_truthy(Value)
  *   (determine truthiness for control flow)
  *
- * Notes:
+ * NOTES:
  * - Instructions are 32-bit packed values: [op:8][a:8][b:8][c:8].
  * - Registers are a single flat array; each call frame is a window into it
  *   defined by Frame.base and Frame.regc.
@@ -78,6 +81,14 @@
 // my headers (also pulls in stdint and stdbool)
 #include "typing.h"
 #include "opcodes.h"
+
+// read from the header
+#define MAGIC "STIK"
+#define VERSION 1
+// #define FLAG_VERBOSE 0x0001 (gonna add this later)
+
+// legit just an array helper. properly sizes instructions. do not pass anything that isnt an array into this
+#define LEN(a) ((uint32_t)(sizeof(a) / sizeof((a)[0])))
 
 // pack instructions (shift everything to its proper location) only needed for testing cuz instructions will be packed
 // enum just acts as opcode spec, cuz it's enumerated
@@ -135,15 +146,18 @@ typedef struct VM {
 } VM;
 
 
-// api
+// setup/teardown
 void vm_init(VM* vm);
 void vm_free(VM* vm);
+
+// load a file into VM owned memory
+bool vm_load_file(VM* vm, const char* path);
 
 // load a chunk from the instruction stream
 void vm_load(
     VM* vm,                                            // pointer to vm (to load into)
-    const Instruction* code, uint32_t code_len,        // instruction stream
-    const Value* consts, uint32_t consts_len,          // const pool
+    const Instruction* code, uint32_t code_len,        // instruction stream (owned by VM after call)
+    const Value* consts, uint32_t consts_len,          // const pool (borrowed)
     const Value* globals_init, uint32_t globals_len    // global pool
 );
 
@@ -175,12 +189,16 @@ static inline bool value_truthy(VM* vm, Value v) {
         // objects check if nulled
         case OBJ:      return v.as.obj != NULL;
 
-        // if callable, call it (no args) and use its return value's truthiness
+        // functions/others
         case CALLABLE: {
+            // null checks
             if (vm == NULL || v.as.fn == NULL) return false;
-            Value out;
 
+            // call it (no args yet)
+            Value out;
             if (!vm_call(vm, v.as.fn, NULL, 0, &out)) return false;
+
+            // use its return value's truthiness
             return value_truthy(vm, out);
         }
 

@@ -72,7 +72,7 @@ typedef enum {
 } FuncType;
 
 
-// forward declare AND create alias
+// forward declare AND create alias for both (may not do for Value as idk if i need)
 typedef struct Func Func;
 typedef struct Value {
     ValueType type;
