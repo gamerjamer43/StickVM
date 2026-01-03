@@ -84,3 +84,14 @@
   - used the only gotos i want to use lol, centralizes freeing and closing the file on error
 - log.md (created):
   - wrote this part of the commit log
+
+# Commit 5.5:
+- vm.c:
+  - moved reader helpers to io/reader.c, specs in io/reader.h
+  - moved everything for vm (opcodes.h, typing.h, vm.h, vm.c) into vm/
+- reader.h (created):
+  - did not have function prototypes before, now i do
+- reader.c:
+  - moved read_exact, read_u16_le, read_u32_le, and vm_load_file inside
+- MAKEFILE:
+  - updated to properly use -I, now compiling whats in vm/ and io/

@@ -1,0 +1,21 @@
+#include "vm.h"
+
+/**
+ * read an exact amt of bits from a packed struct
+ */
+bool read_exact(FILE* f, void* out, size_t n);
+
+/**
+ * read a 16 bit value from a packed struct
+ */
+uint16_t read_u16_le(const uint8_t b[2]);
+
+/**
+ * read a 32 bit value from a packed struct
+ */
+uint32_t read_u32_le(const uint8_t b[4]);
+
+/**
+ * read and load a file into memory. exclusively deals with the file, then vm_load handles the rest
+ */
+bool vm_load_file(VM* vm, const char* path);

@@ -5,13 +5,13 @@
 CC := gcc
 
 # compiler flags
-FLAGS := -std=c99 -Wall -Wextra -O3 -g -fno-common
+FLAGS := -std=c99 -Wall -Wextra -O3 -g -fno-common -I. -Ivm -Ireader
 
 # linker flags
 LDFLAGS :=
 
 # gather all .c files as a source
-SRC := $(wildcard *.c)
+SRC := $(wildcard *.c */*.c)
 OBJS := $(SRC:.c=.o)
 DEPS := $(OBJS:.o=.d)
 

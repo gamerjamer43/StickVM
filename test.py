@@ -1,5 +1,7 @@
 """
-simple writer for VM tests. all i'm doing with this is taking serialized u32 instructions and
+simple writer for VM tests.
+all i'm doing with this is taking serialized u32 instructions
+and packing them w a 12 byte header.
 """
 from struct import pack
 from numpy import array, uint32
@@ -13,7 +15,7 @@ HEADER: bytes = b"STIK"
 
 # pack as unsigned 4 byte ints, also save instruction count
 # 01 = panic opcode, 01 = panic code, 0000 rest are null
-code: NDArray[uint32] = array([0x00000000], dtype="<u4")
+code: NDArray[uint32] = array([0x01010000], dtype="<u4")
 count: int = len(code)
 
 # other necessary info
