@@ -9,3 +9,6 @@
 
 # emitted bytecode
 *.stk
+
+# bytecode format planning
+spec.md

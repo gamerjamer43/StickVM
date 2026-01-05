@@ -1,3 +1,10 @@
+/**
+ * @file reader.h
+ * @author Noah Mingolelli
+ * general helpers to read directly from a binary file. files are embedded little endian
+ * doccing this later cuz no
+ */
+
 #include "vm.h"
 
 /**

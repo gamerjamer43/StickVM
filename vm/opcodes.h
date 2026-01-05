@@ -19,6 +19,9 @@ typedef enum {
 
     HALT = 0,  // stop program execution
 
+    // runtime errors
+    PANIC,     // abort execution (attach an error code thru a constant)
+
     // move instruction pointer
     JMP,       // offset instruction pointer by a signed 32 bit value
     JMPIF,     // if src0 != 0, IP += (int32_t)src1
@@ -95,9 +98,6 @@ typedef enum {
     F2I,       // float to int. dst = (int64_t)src1
     I2U,       // signed to unsigned 64 bit. dst = (uint64_t)src1
     U2I,       // unsigned to signed 64 bit. dst = (int64_t)src1
-
-    // runtime errors
-    PANIC,     // abort execution (attach an error code thru a constant)
 
     // maybe intermediate forms idk yet
     // LOADI   // load an immediate value (src1) into src0 (LOADI r0, 420)

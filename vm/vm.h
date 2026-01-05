@@ -54,8 +54,8 @@
  *   (extract packed instruction fields from Instruction)
  * - instr_simm8_b(Instruction)
  *   (interpret B-field as signed 8-bit immediate for branches)
- * - value_truthy(Value)
- *   (determine truthiness for control flow)
+ * - value_falsy(Value)
+ *   (determine falsiness for control flow)
  *
  * NOTES:
  * - Instructions are 32-bit packed values: [op:8][a:8][b:8][c:8].
@@ -97,13 +97,14 @@ static inline Instruction pack(uint8_t op, uint8_t a, uint8_t b, uint8_t c) {
 }
 
 // getters for each part of the instruction (simple bit shift & mask)
-static inline IField opcode(Instruction ins) { return (uint8_t)((ins >> 24) & 0xFF); }
-static inline IField op_a  (Instruction ins) { return (uint8_t)((ins >> 16) & 0xFF); }
-static inline IField op_b  (Instruction ins) { return (uint8_t)((ins >>  8) & 0xFF); }
-static inline IField op_c  (Instruction ins) { return (uint8_t)((ins >>  0) & 0xFF); }
+static inline uint32_t opcode(Instruction ins) { return (uint8_t)((ins >> 24) & 0xFF); }
+static inline uint32_t op_a  (Instruction ins) { return (uint8_t)((ins >> 16) & 0xFF); }
+static inline uint32_t op_b  (Instruction ins) { return (uint8_t)((ins >>  8) & 0xFF); }
+static inline uint32_t op_c  (Instruction ins) { return (uint8_t)((ins >>  0) & 0xFF); }
 
-// for JMP/JMPIF/JMPIFZ: signed offsets are in src1
-static inline int8_t instr_simm8_b(Instruction ins) { return (int8_t)op_b(ins); }
+// for JMP/JMPIF/JMPIFZ: signed offsets are in src0 for JMP, and src1 for JMPIFZ/JMPIF
+static inline int32_t op_signed_a(Instruction ins) { return (int32_t)op_a(ins); }
+static inline int32_t op_signed_b(Instruction ins) { return (int32_t)op_b(ins); }
 
 // call frames
 typedef struct Frame {
@@ -175,31 +176,33 @@ bool vm_run(VM* vm);
 // Func* vm_new_native(VM* vm, NativeFn fn, uint16_t argc);
 
 // helper for implicit falisness
-static inline bool value_truthy(VM* vm, Value v) {
+// TODO: decide if comparisons are all canonical (overhead) or done by true value
+static inline bool value_falsy(VM* vm, Value v) {
     switch (v.type) {
-        case NUL:      return false;   // null always false
+        case NUL:      return true;   // null always false
         case BOOL:     return v.as.b;  // boolean do by value
 
         // any number check zero equality
-        case I64:      return v.as.i   != 0;
-        case U64:      return v.as.u   != 0;
-        case FLOAT:    return v.as.f   != 0.0f;
-        case DOUBLE:   return v.as.d   != 0.0;
+        case I64:      return v.as.i   == 0;
+        case U64:      return v.as.u   == 0;
+        case FLOAT:    return v.as.f   == 0.0f;
+        case DOUBLE:   return v.as.d   == 0.0;
 
         // objects check if nulled
-        case OBJ:      return v.as.obj != NULL;
+        case OBJ:      return v.as.obj == NULL;
 
         // functions/others
         case CALLABLE: {
             // null checks
-            if (vm == NULL || v.as.fn == NULL) return false;
+            if (vm == NULL || v.as.fn == NULL) return true;
 
             // call it (no args yet)
             Value out;
-            if (!vm_call(vm, v.as.fn, NULL, 0, &out)) return false;
+            // TODO: add vm_call
+            // if (!vm_call(vm, v.as.fn, NULL, 0, &out)) return true;
 
             // use its return value's truthiness
-            return value_truthy(vm, out);
+            return value_falsy(vm, out);
         }
 
         // otherwise its just false i'll deal w this later lol

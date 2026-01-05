@@ -82,6 +82,7 @@ void vm_load(
     // if no allocated vm ep ep ep bad boy
     if (!vm) return;
 
+    // make sure instructions point to the right thing
     if (vm->istream && vm->istream != code) {
         free((void*)vm->istream);
     }
@@ -95,7 +96,7 @@ void vm_load(
     vm->panic_code = 0;
     vm->frame_count = 0;
 
-    // take ownership of the instructions (no copy)
+    // take ownership of the instructions (no copy, 8 = out of memory)
     if (code_len > 0) {
         if (!code) {
             vm->panic_code = 8;
@@ -113,12 +114,59 @@ void vm_load(
     // allocate globals (if necessary, if none just return)
     if (globals_len == 0) return;
     vm->globals = (Value*)calloc(globals_len, sizeof(Value));
-    if (!vm->globals) return;
+    if (!vm->globals) {
+        vm->panic_code = 8;
+        return;
+    }
 
     vm->globals_len = globals_len;
     if (globals_init) {
         memcpy(vm->globals, globals_init, globals_len * sizeof(Value));
     }
+}
+
+/**
+ * ensure we have enough registers to store a value
+ * @param vm the vm instance to check
+ * @param need a uint32_t proclaiming how many registers are needed
+ */
+static inline bool ensure_regs(VM* vm, uint32_t need) {
+    if (!vm) return false;
+    if (need <= vm->regs_cap) return true;
+
+    // resize or code 8 (out of memory)
+    Value* regs = (Value*)realloc(vm->regs, (size_t)need * sizeof(Value));
+    if (!regs) {
+        vm->panic_code = 8;
+        return false;
+    }
+
+    // zero initialize registers
+    memset(regs + vm->regs_cap, 0, (need - vm->regs_cap) * sizeof(Value));
+
+    // set properly and return true (no error)
+    vm->regs = regs;
+    vm->regs_cap = need;
+    return true;
+}
+
+/**
+ * jump to a relative offset. used for JMP, JMPIF, and JMPIFZ
+ * @param vm a vm struct to read from
+ * @param off the offset to jump forward or backwards from
+ */
+static inline bool jump_rel(VM* vm, int32_t off) {
+    int32_t next = (int32_t)vm->ip + off;
+
+    // usually >= is right (ip must be in [0, icount-1])
+    if (next < 0 || (uint32_t)next >= vm->icount) {
+        printf("out of bounds");
+        vm->panic_code = 1;
+        return false;
+    }
+
+    vm->ip = (uint32_t)next;
+    return true;
 }
 
 /**
@@ -136,6 +184,7 @@ bool vm_run(VM* vm) {
         // pull current instruction and increment ip
         Instruction ins = vm->istream[vm->ip++];
 
+        printf("code: %d\n", opcode(ins));
         switch ((Opcode)opcode(ins)) {
             // normal halt returns with no issues
             case HALT:
@@ -143,12 +192,112 @@ bool vm_run(VM* vm) {
 
             // panic on failure, panic returns a code from 0-256 with op_a
             case PANIC:
-                vm->panic_code = (uint32_t)op_a(ins);
+                vm->panic_code = op_a(ins);
                 return false;
 
-            // no opcode found
+            // jump (1 instr, signed)
+            case JMP: {
+                int32_t off = op_signed_a(ins);
+                if (!jump_rel(vm, off)) return false;
+                break;
+            }
+
+            case JMPIF: {
+                // not implemented yet, may have to additionally define truthiness
+                vm->panic_code = 9;
+                return false;
+            }
+
+            case JMPIFZ: {
+                uint32_t src = op_a(ins);
+                int32_t off  = op_signed_b(ins);
+
+                // make sure register is valid before jumping
+                if (src >= vm->regs_cap) {
+                    vm->panic_code = 1;
+                    return false;
+                }
+
+                // if falsy ignore, but if offset invalid, panic
+                // TODO: fix compiler warnings that come with this: if (value_falsy(vm, vm->regs[src])) {
+                if (vm->regs[src].as.i == 0) {
+                    if (!jump_rel(vm, off)) return false;
+                }
+                break;
+            }
+
+            case MOVE: {
+                uint32_t dest = op_a(ins);
+                uint32_t src  = op_b(ins);
+
+                // assess the need, based on destination or src, and grow if needed
+                uint32_t need = (dest > src ? dest : src) + 1;
+                if (!ensure_regs(vm, need)) return false;
+
+                // move from source to destination, zero out source register
+                vm->regs[dest] = vm->regs[src];
+                vm->regs[src] = (Value){0};
+                break;
+            }
+
+            // store a constant to the CONSTANT pool
+            case LOADC: {
+                uint32_t dest  = op_a(ins);
+                uint32_t index = op_b(ins);
+
+                // if no pool or out of bounds panic
+                if (!vm->consts || index >= vm->constcount) {
+                    vm->panic_code = 1;
+                    return false;
+                }
+
+                // ensure registers then make the move
+                if (!ensure_regs(vm, dest + 1)) return false;
+                vm->regs[dest] = vm->consts[index];
+                break;
+            }
+
+            // load a global from the pool
+            case LOADG: {
+                uint32_t dest  = op_a(ins);
+                uint32_t index = op_b(ins);
+
+                // if no pool or out of bounds panic (really needa fix this name pollution next)
+                if (!vm->globals || index >= vm->globals_len) {
+                    vm->panic_code = 1;
+                    return false;
+                }
+
+                // ensure registers then make the move
+                if (!ensure_regs(vm, dest + 1)) return false;
+                vm->regs[dest] = vm->globals[index];
+                break;
+            }
+
+            // store a global to the pool
+            case STOREG: {
+                uint32_t src   = op_a(ins);
+                uint32_t index = op_b(ins);
+
+                if (!vm->globals || index >= vm->globals_len) {
+                    vm->panic_code = 1;
+                    return false;
+                }
+
+                if (src >= vm->regs_cap) {
+                    vm->panic_code = 1;
+                    return false;
+                }
+
+                vm->globals[index] = vm->regs[src];
+                break;
+            }
+
+            // TODO: add JMPIF and JMPIFZ after const and global pool are properly read
+
+            // nothing matched (9 = invalid opcode)
             default:
-                vm->panic_code = 1;
+                vm->panic_code = 9;
                 return false;
         }
     }

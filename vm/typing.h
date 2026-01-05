@@ -12,6 +12,7 @@
  * ValueType -> enum       (primitive type spec, read through to see all the primitives)
  * FuncType -> enum        (2 options, NATIVE function from C, or a normal BYTECODE function)
  *
+ * TODO: figure out how to deal with bit width besides holding everything as an int
  * Value -> struct, fields:
  * - ValueType type;       (you know what this means, the type the Value currently has attatched to it)
  * - union as;             (so you can hold that object based on its type)
@@ -49,20 +50,16 @@
 // instructions are 32 bit packed. (opcode << 24 | src0 << 16 | src1 << 8 | src2 << 0)
 typedef uint32_t Instruction;
 
-// so specific fields are 8 bit
-typedef uint8_t IField;
-
-// enum type listing up here
-typedef enum ValueType {
-    NUL,        // standard "None"/"null" type
-    BOOL,       // a true or false value (represented by 0 or 1)
-    U64,        // an unsigned 64 bit integer
-    I64,        // a signed 64 bit integer
-    FLOAT,      // a 32 bit single precision float
-    DOUBLE,     // a 64 bit double precision float
-    OBJ,        // a general object
-    CALLABLE,   // a callable
-} ValueType;
+// type listing up here (1 byte instead of 8)
+typedef uint8_t ValueType;
+#define NUL  0        // standard "None"/"null" type
+#define BOOL 1       // a true or false value (represented by 0 or 1)
+#define U64  2        // an unsigned 64 bit integer
+#define I64  3        // a signed 64 bit integer
+#define FLOAT 4      // a 32 bit single precision float
+#define DOUBLE 5     // a 64 bit double precision float
+#define OBJ 6        // a general object
+#define CALLABLE 7   // a callable
 
 // support for native C functions will be added.
 // this is so webservers and shit can exist
@@ -74,6 +71,9 @@ typedef enum {
 
 // forward declare AND create alias for both (may not do for Value as idk if i need)
 typedef struct Func Func;
+
+// i'm trying to figure this out but my issue at hand is the compiler will still pad to 16 bytes
+// what if i were to initialize everything to null and do null checks to check type
 typedef struct Value {
     ValueType type;
 

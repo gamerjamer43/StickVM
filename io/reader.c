@@ -9,10 +9,7 @@ uint16_t read_u16_le(const uint8_t b[2]) {
 }
 
 uint32_t read_u32_le(const uint8_t b[4]) {
-    return (uint32_t)b[0]
-         | ((uint32_t)b[1] << 8)
-         | ((uint32_t)b[2] << 16)
-         | ((uint32_t)b[3] << 24);
+    return pack(b[3], b[2], b[1], b[0]);
 }
 
 
@@ -30,16 +27,18 @@ bool vm_load_file(VM* vm, const char* path) {
     int err = 0;
     Instruction* code = NULL;
 
-    // header shit (3 = truncated header, make sure it's exactly 12 bytes).
-    // it goes: STIK <2 byte version> <2 byte flags> <4 byte count>
-    uint8_t magic[4];
-    uint8_t vbuf[2], fbuf[2], cbuf[4];
+    // header shit (3 = truncated header, make sure it's exactly 20 bytes).
+    // it goes: STIK <2 byte version> <2 byte flags> <4 byte instruction count> <4 byte constant count> <4 byte global count>
+    uint8_t magic[4], vbuf[2], fbuf[2], icount[4], ccount[4], gcount[4];
 
-    if (!read_exact(f, magic, 4) ||
-        !read_exact(f, vbuf, 2)  ||
-        !read_exact(f, fbuf, 2)  ||
-        !read_exact(f, cbuf, 4))
-    {
+    if (
+        !read_exact(f, magic, 4)  ||
+        !read_exact(f, vbuf, 2)   ||
+        !read_exact(f, fbuf, 2)   ||
+        !read_exact(f, icount, 4) ||
+        !read_exact(f, ccount, 4) ||
+        !read_exact(f, gcount, 4)
+    ) {
         err = 3;
         goto fail_file;
     }
@@ -51,9 +50,13 @@ bool vm_load_file(VM* vm, const char* path) {
     }
 
     // pulled from the file
-    uint16_t version = read_u16_le(vbuf);
-    uint16_t flags   = read_u16_le(fbuf); // unused frn i'll let the compiler keep warning me
-    uint32_t count   = read_u32_le(cbuf);
+    uint16_t version     = read_u16_le(vbuf);
+    uint32_t count       = read_u32_le(icount);
+    uint32_t constcount  = read_u32_le(ccount);
+    uint32_t globalcount = read_u32_le(gcount);
+
+    // also pulled but unused frn i'll let the compiler keep warning me
+    uint16_t flags       = read_u16_le(fbuf);
 
     // version check (5 = unsupported version)
     if (version != VERSION) {
@@ -82,6 +85,33 @@ bool vm_load_file(VM* vm, const char* path) {
 
     // read instructions into the buffer (using little endian by default) and safely null file when done
     size_t got = fread(code, sizeof(Instruction), count, f);
+
+    // MAY EDIT UP THIS SECTION, A DRY FEELS VERY NECESSARY
+    // read constant pool after code
+    Value* consts = NULL;
+    if (constcount > 0) {
+        consts = (Value*)malloc(constcount * sizeof(Value));
+        if (!consts || !read_exact(f, (uint8_t*)consts, constcount * sizeof(Value))) {
+            err = 10;  // const pool read failed
+            free(consts);
+            goto fail_code;
+        }
+    }
+
+    // lastly the global pool
+    Value* globals = NULL;
+    if (globalcount > 0) {
+        globals = (Value*)malloc(globalcount * sizeof(Value));
+        if (!globals || !read_exact(f, (uint8_t*)globals, globalcount * sizeof(Value))) {
+            err = 11;  // globals read failed
+            free(globals);
+            free(consts);
+            goto fail_code;
+        }
+    }
+    // END POTENTIAL EDIT
+
+    // close safely and null out
     fclose(f);
     f = NULL;
 
@@ -92,7 +122,7 @@ bool vm_load_file(VM* vm, const char* path) {
     }
 
     // vm load deals with the rest
-    vm_load(vm, code, count, NULL, 0, NULL, 0);
+    vm_load(vm, code, count, consts, constcount, globals, globalcount);
     if (!vm->istream) {
         err = vm->panic_code ? (int)vm->panic_code : 8;
         goto fail_code;
