@@ -73,7 +73,7 @@ typedef enum {
 typedef struct Func Func;
 
 // i'm trying to figure this out but my issue at hand is the compiler will still pad to 16 bytes
-// what if i were to initialize everything to null and do null checks to check type
+// my thought is just add a bump allocator and store a handle which corresponds to that value, though runtime startup may suffer
 typedef struct Value {
     ValueType type;
 

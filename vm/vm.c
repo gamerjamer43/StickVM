@@ -240,7 +240,24 @@ bool vm_run(VM* vm) {
                 break;
             }
 
-            // store a constant to the CONSTANT pool
+            // load an immediate to a register
+            case LOADI: {
+                uint32_t dest  = op_a(ins);
+                int32_t  imm   = (int32_t)op_b(ins) - 127; // supporting -127 to 128 as theyre most commonly used
+                
+                // ensure registers then make the move
+                if (!ensure_regs(vm, dest + 1)) return false;
+
+                // TODO: change this to decide signed vs unsigned (for rn loading it signed)
+                Value val;
+                val.type = I64;
+                val.as.i = imm;
+
+                vm->regs[dest] = val;
+                break;
+            }
+
+            // load a constant from the CONSTANT pool
             case LOADC: {
                 uint32_t dest  = op_a(ins);
                 uint32_t index = op_b(ins);
@@ -329,7 +346,11 @@ void log_instructions(VM *vm) {
  */
 int main(int argc, char const *argv[]) {
     // default to program.stk if no path for rn. no emitter so im just writing test binaries using python's struct.pack
-    const char* path = (argc > 1) ? argv[1] : "program.stk";
+    const char* path = (argc > 1) ? argv[1] : NULL;
+    if (path == NULL) {
+        printf("provide a compiled .stk file to run\n");
+        exit(0);
+    }
 
     // init and load file (if failed free safely, return panic code or 1 if no code)
     VM vm;

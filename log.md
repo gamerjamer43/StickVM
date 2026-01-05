@@ -95,3 +95,6 @@
   - moved read_exact, read_u16_le, read_u32_le, and vm_load_file inside
 - MAKEFILE:
   - updated to properly use -I, now compiling whats in vm/ and io/
+
+# TODO:
+  - need to finish this log i forgot to add 6 and 6.5 (skipping 7 L)

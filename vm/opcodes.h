@@ -29,6 +29,7 @@ typedef enum {
 
     // movement and storage
     MOVE,      // move values between registers
+    LOADI,     // load an immediate value -128 through 128 (signed, testing ths)
     LOADC,     // load constant into src0     C = constant
     LOADG,     // load global into src0
     STOREG,    // store global into the table G = global
@@ -98,9 +99,6 @@ typedef enum {
     F2I,       // float to int. dst = (int64_t)src1
     I2U,       // signed to unsigned 64 bit. dst = (uint64_t)src1
     U2I,       // unsigned to signed 64 bit. dst = (int64_t)src1
-
-    // maybe intermediate forms idk yet
-    // LOADI   // load an immediate value (src1) into src0 (LOADI r0, 420)
 
     // more here
 } Opcode;

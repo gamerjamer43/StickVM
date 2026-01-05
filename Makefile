@@ -1,34 +1,39 @@
 # all commands
+.DEFAULT_GOAL := all
 .PHONY: all clean run
 
-# change to clang if u rly want
 CC := gcc
 
 # compiler flags
-FLAGS := -std=c99 -Wall -Wextra -O3 -g -fno-common -I. -Ivm -Ireader
+FLAGS := -std=c99 -Wall -Wextra -O3 -g -fno-common -I. -Ivm -Iio
 
-# linker flags
 LDFLAGS :=
 
-# gather all .c files as a source
-SRC := $(wildcard *.c */*.c)
+SRC  := $(wildcard *.c */*.c)
 OBJS := $(SRC:.c=.o)
 DEPS := $(OBJS:.o=.d)
 
-# vm.exe on windows
 ifeq ($(OS),Windows_NT)
 TARGET := vm.exe
-RUN := .\$(TARGET)
-RM := del /Q
+RUN    := .\$(TARGET)
 
-# vm elf binary on linux
+# properly convert folder paths so make dont think theyre flags
+WIN_CLEAN := $(subst /,\,$(OBJS) $(DEPS) $(TARGET))
+
+clean:
+	-@del /Q $(WIN_CLEAN) 2>NUL
+
 else
 TARGET := vm
-RUN := ./$(TARGET)
-RM := rm -f
+RUN    := ./$(TARGET)
+
+clean:
+	$(RM) $(OBJS) $(DEPS) $(TARGET)
 endif
 
-# all compiles and runs (aka just make)
+# default rm for non-windows
+RM := rm -f
+
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
@@ -39,10 +44,5 @@ $(TARGET): $(OBJS)
 
 -include $(DEPS)
 
-# clean purges it all
-clean:
-	$(RM) $(OBJS) $(DEPS) $(TARGET)
-
-# run just runs assuming already build
 run: all
 	$(RUN)
