@@ -52,14 +52,14 @@ typedef uint32_t Instruction;
 
 // type listing up here (1 byte instead of 8)
 typedef uint8_t ValueType;
-#define NUL  0        // standard "None"/"null" type
-#define BOOL 1       // a true or false value (represented by 0 or 1)
-#define U64  2        // an unsigned 64 bit integer
-#define I64  3        // a signed 64 bit integer
-#define FLOAT 4      // a 32 bit single precision float
-#define DOUBLE 5     // a 64 bit double precision float
-#define OBJ 6        // a general object
-#define CALLABLE 7   // a callable
+#define NUL       0   // standard "None"/"null" type
+#define BOOL      1   // a true or false value (represented by 0 or 1)
+#define U64       2   // an unsigned 64 bit integer
+#define I64       3   // a signed 64 bit integer
+#define FLOAT     4   // a 32 bit single precision float
+#define DOUBLE    5   // a 64 bit double precision float
+#define OBJ       6   // a general object
+#define CALLABLE  7   // a callable
 
 // support for native C functions will be added.
 // this is so webservers and shit can exist

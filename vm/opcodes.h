@@ -28,11 +28,14 @@ typedef enum {
     JMPIFZ,    // if src0 == 0, IP += (int32_t)src1
 
     // movement and storage
-    MOVE,      // move values between registers
-    LOADI,     // load an immediate value -128 through 128 (signed, testing ths)
+    COPY,      // copy a value from one register to another (no nulling)
+    MOVE,      // move values between registers (null the previous register)
+    LOADI,    // load an immediate value -32768 to 32767
     LOADC,     // load constant into src0     C = constant
     LOADG,     // load global into src0
     STOREG,    // store global into the table G = global
+
+    // CURRENTLY DONE UP TO HERE (WITH THE EXCEPTION OF JMPIF)
 
     // call stack
     CALL,      // create a stack frame and jump

@@ -151,21 +151,35 @@ static inline bool ensure_regs(VM* vm, uint32_t need) {
 }
 
 /**
- * jump to a relative offset. used for JMP, JMPIF, and JMPIFZ
+ * jump to a relative offset. used for JMP, JMPIF, and JMPIFZ. improved safety by casting to int64 (avoiding overflows)
  * @param vm a vm struct to read from
  * @param off the offset to jump forward or backwards from
  */
 static inline bool jump_rel(VM* vm, int32_t off) {
-    int32_t next = (int32_t)vm->ip + off;
+    int64_t next = (int64_t)vm->ip + (int64_t)off;
 
-    // usually >= is right (ip must be in [0, icount-1])
-    if (next < 0 || (uint32_t)next >= vm->icount) {
-        printf("out of bounds");
+    if (next < 0 || next >= (int64_t)vm->icount) {
         vm->panic_code = 1;
         return false;
     }
 
     vm->ip = (uint32_t)next;
+    return true;
+}
+
+/**
+ * copy a value from register to register (nulling does not happen here)
+ * @param vm a vm struct to read from
+ * @param dest the register to copy to
+ * @param src the register to copy from
+ */
+static inline bool copy(VM* vm, uint32_t dest, uint32_t src) {
+    // assess the need, based on destination or src, and grow if needed
+    uint32_t need = (dest > src ? dest : src) + 1;
+    if (!ensure_regs(vm, need)) return false;
+
+    // move from source to destination, zero out source register
+    vm->regs[dest] = vm->regs[src];
     return true;
 }
 
@@ -197,7 +211,7 @@ bool vm_run(VM* vm) {
 
             // jump (1 instr, signed)
             case JMP: {
-                int32_t off = op_signed_a(ins);
+                int32_t off = op_i24(ins);
                 if (!jump_rel(vm, off)) return false;
                 break;
             }
@@ -210,7 +224,7 @@ bool vm_run(VM* vm) {
 
             case JMPIFZ: {
                 uint32_t src = op_a(ins);
-                int32_t off  = op_signed_b(ins);
+                int32_t  off = op_i16(ins);
 
                 // make sure register is valid before jumping
                 if (src >= vm->regs_cap) {
@@ -226,25 +240,30 @@ bool vm_run(VM* vm) {
                 break;
             }
 
+            // copy WITHOUT nulling
+            case COPY: {
+                uint32_t dest = op_a(ins);
+                uint32_t src  = op_b(ins);
+
+                if (!copy(vm, dest, src)) return false;
+                break;
+            }
+
+            // copy AND null (may combine into one instruction)
             case MOVE: {
                 uint32_t dest = op_a(ins);
                 uint32_t src  = op_b(ins);
 
-                // assess the need, based on destination or src, and grow if needed
-                uint32_t need = (dest > src ? dest : src) + 1;
-                if (!ensure_regs(vm, need)) return false;
-
-                // move from source to destination, zero out source register
-                vm->regs[dest] = vm->regs[src];
+                if (!copy(vm, dest, src)) return false;
                 vm->regs[src] = (Value){0};
                 break;
             }
 
-            // load an immediate to a register
+            // load an immediate to a register (16 bit)
             case LOADI: {
                 uint32_t dest  = op_a(ins);
-                int32_t  imm   = (int32_t)op_b(ins) - 127; // supporting -127 to 128 as theyre most commonly used
-                
+                int32_t  imm   = op_i16(ins);
+
                 // ensure registers then make the move
                 if (!ensure_regs(vm, dest + 1)) return false;
 
@@ -293,7 +312,7 @@ bool vm_run(VM* vm) {
 
             // store a global to the pool
             case STOREG: {
-                uint32_t src   = op_a(ins);
+                uint32_t dest   = op_a(ins);
                 uint32_t index = op_b(ins);
 
                 if (!vm->globals || index >= vm->globals_len) {
@@ -301,12 +320,27 @@ bool vm_run(VM* vm) {
                     return false;
                 }
 
-                if (src >= vm->regs_cap) {
+                if (!ensure_regs(vm, dest + 1)) return false;
+
+                vm->globals[index] = vm->regs[dest];
+                break;
+            }
+
+            // add src1 and src2 and store in src0
+            case ADD: {
+                uint32_t dest = op_a(ins);
+                uint32_t lhs  = op_b(ins);
+                uint32_t rhs  = op_c(ins);
+
+                if (lhs >= vm->regs_cap || rhs >= vm->regs_cap) {
                     vm->panic_code = 1;
                     return false;
                 }
 
-                vm->globals[index] = vm->regs[src];
+                if (!ensure_regs(vm, dest + 1)) return false;
+
+                // already run into an issue. continue here
+                // vm->globals[dest] = vm->regs[lhs] + vm->regs[rhs];
                 break;
             }
 

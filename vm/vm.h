@@ -103,8 +103,21 @@ static inline uint32_t op_b  (Instruction ins) { return (uint8_t)((ins >>  8) & 
 static inline uint32_t op_c  (Instruction ins) { return (uint8_t)((ins >>  0) & 0xFF); }
 
 // for JMP/JMPIF/JMPIFZ: signed offsets are in src0 for JMP, and src1 for JMPIFZ/JMPIF
-static inline int32_t op_signed_a(Instruction ins) { return (int32_t)op_a(ins); }
-static inline int32_t op_signed_b(Instruction ins) { return (int32_t)op_b(ins); }
+// this was not actually signed but now is
+static inline int32_t op_signed_a(Instruction ins) { return (int8_t)op_a(ins); }
+static inline int32_t op_signed_b(Instruction ins) { return (int8_t)op_b(ins); }
+
+// for LOADI16 (which i may find use elsewhere but just to clean it for rn)
+// relies on the same behavior as below
+static inline int32_t op_i16(Instruction ins) {
+    return ((int32_t)(ins << 16) >> 16);
+}
+
+// for JMPW and other wide single operand signed instructions.
+// this works b/c of normal signed right shift behavior. last bit gets pulled down allowing for both zero and sign ext.
+static inline int32_t op_i24(Instruction ins) {
+    return ((int32_t)(ins << 8)) >> 8;
+}
 
 // call frames
 typedef struct Frame {

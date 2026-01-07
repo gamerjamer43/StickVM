@@ -4,6 +4,7 @@ writes a 20 byte header + u32 instruction stream,
 plus optional const/global pools (raw Value bytes).
 little endian.
 """
+from enum import IntEnum, auto
 from struct import pack
 from numpy import array, uint32
 from numpy.typing import NDArray
@@ -20,16 +21,18 @@ VERSION: int = 1
 FLAGS: int = 1 if VERBOSE else 0
 
 # opcode table (keep in sync with vm/opcodes.h)
-HALT: int = 0
-PANIC: int = 1
-JMP: int = 2
-JMPIF: int = 3
-JMPIFZ: int = 4
-MOVE: int = 5
-LOADI: int = 6
-LOADC: int = 7
-LOADG: int = 8
-STOREG: int = 9
+class Opcode(IntEnum):
+    HALT    = 0
+    PANIC   = auto()
+    JMP     = auto()
+    JMPIF   = auto()
+    JMPIFZ  = auto()
+    COPY    = auto()
+    MOVE    = auto()
+    LOADI   = auto() # trying to decide if i should offer a 16 bit loadi or
+    LOADC   = auto()
+    LOADG   = auto()
+    STOREG  = auto()
 
 # ValueType tags (from vm/typing.h)
 TYPE_I64: int = 3
@@ -54,74 +57,88 @@ def test(name: str, program: NDArray[uint32], consts=None, globals_=None):
 # list of (name, test code, const pool, global pool)
 TESTS: list[tuple[str, NDArray[uint32], list[bytes], list[bytes]]] = [
     # halt, successful stop of program (passed)
-    test("halt", code(ins(HALT))),
+    test("halt", code(ins(Opcode.HALT))),
 
     # immediately panic with code 1 (passed)
-    test("panic_code_1", code(ins(PANIC, 1))),
+    test("panic_code_1", code(ins(Opcode.PANIC, 1))),
 
-    # jump past panic with code one, run panic with code 3 (passed)
-    test("basic_jmp", code(ins(JMP, 1), ins(PANIC, 1), ins(PANIC, 3))),
+    # jump past panic with code one, halt safely (passed)
+    test("basic_jmp", code(ins(Opcode.JMP, 0, 0, 1), ins(Opcode.PANIC, 1), ins(Opcode.HALT))),
 
     # jmpifz should jump over panic when register 1 is 0 (passed)
     test(
         "jmpifz_taken",
         code(
-            ins(MOVE, 0, 0),
-            ins(JMPIFZ, 0, 1),
-            ins(PANIC, 1),
-            ins(HALT),
+            ins(Opcode.LOADI, 0, 0, 0),
+            ins(Opcode.JMPIFZ, 0, 0, 1),
+            ins(Opcode.PANIC, 1),
+            ins(Opcode.HALT),
         ),
     ),
 
-    # move should preserve non-zero into the destination register
+    # copy should preserve non-zero into the destination register (and source, copied from below)
     # jumps over halt to panic if value in register 1 is 0 (passed)
     test(
-        "move_nonzero",
+        "copy_nonzero",
         code(
-            ins(LOADC, 0, 0),
-            ins(MOVE, 1, 0),
-            ins(JMPIFZ, 1, 1),
-            ins(HALT),
-            ins(PANIC, 1),
+            ins(Opcode.LOADC, 0, 0),
+            ins(Opcode.COPY, 1, 0),
+            ins(Opcode.JMPIFZ, 1, 0, 1),
+            ins(Opcode.HALT),
+            ins(Opcode.PANIC, 1),
         ),
         consts=[val_i64(7)],
     ),
 
-    # loadi should create a non-zero register value (passed, was doing a constant pool bounds check for immediates)
+    # move should preserve non-zero into the destination register
+    # jumps over halt to panic if value in register 1 is 0 (passed normally, but test that the value moved is not still in the previous register)
+    test(
+        "move_nonzero",
+        code(
+            ins(Opcode.LOADC, 0, 0),
+            ins(Opcode.MOVE, 1, 0),
+            ins(Opcode.JMPIFZ, 1, 0, 1),
+            ins(Opcode.HALT),
+            ins(Opcode.PANIC, 1),
+        ),
+        consts=[val_i64(7)],
+    ),
+
+    # loadi should create a non-zero register value (passed)
     test(
         "loadi_nonzero",
         code(
-            ins(LOADI, 0, 5),
-            ins(JMPIFZ, 0, 1),
-            ins(HALT),
-            ins(PANIC, 1),
+            ins(Opcode.LOADI, 0, 0, 5),
+            ins(Opcode.JMPIFZ, 0, 0, 1),
+            ins(Opcode.HALT),
+            ins(Opcode.PANIC, 1),
         ),
     ),
 
-    # loadc should read the requested constant (index 1 is zero here) (passed)
-    # jumps to panic if the value in register 1 is 0
+    # loadc should read the requested constant (index 1 is zero here)
+    # jumps to panic if the value in register 1 is 0 (passed)
     test(
         "loadc_zero",
         code(
-            ins(LOADC, 0, 1),
-            ins(JMPIFZ, 0, 1),
-            ins(PANIC, 1),
-            ins(HALT),
+            ins(Opcode.LOADC, 0, 1),
+            ins(Opcode.JMPIFZ, 0, 0, 1),
+            ins(Opcode.PANIC, 1),
+            ins(Opcode.HALT),
         ),
         consts=[val_i64(5), val_i64(0)],
     ),
 
     # storeg/loadg should round-trip through the globals pool
-    # load 0 from the
+    # loads 42 from the constant pool, stores to global pool, and loads it back into register 1 for this
     test(
         "loadg_storeg",
         code(
-            ins(LOADC, 0, 0),
-            ins(STOREG, 0, 0),
-            ins(LOADG, 1, 0),
-            ins(JMPIFZ, 1, 1),
-            ins(HALT),
-            ins(PANIC, 1),
+            ins(Opcode.LOADC, 0, 0),
+            ins(Opcode.STOREG, 0, 0),
+            ins(Opcode.LOADG, 1, 0),
+            ins(Opcode.JMPIFZ, 1, 0, 1),
+            ins(Opcode.HALT),
+            ins(Opcode.PANIC, 1),
         ),
         consts=[val_i64(42)],
         globals_=[val_i64(0)],
@@ -129,14 +146,14 @@ TESTS: list[tuple[str, NDArray[uint32], list[bytes], list[bytes]]] = [
 ]
 
 # create programs directory if it doesn't exist
-Path("programs").mkdir(exist_ok=True)
+Path("tests").mkdir(exist_ok=True)
 
 # generate test files
 for i, (name, program, consts, globals_) in enumerate(TESTS):
     count = len(program)
     constc = len(consts)
     globalc = len(globals_)
-    filename = f"programs/testop{i}_{name}.stk"
+    filename = f"tests/testop{i}_{name}.stk"
 
     with open(filename, "wb") as f:
         f.write(pack("<4sHHIII", HEADER, VERSION, FLAGS, count, constc, globalc))

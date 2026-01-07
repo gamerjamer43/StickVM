@@ -1,8 +1,10 @@
 # all commands
 .DEFAULT_GOAL := all
-.PHONY: all clean run
+.PHONY: all clean run programs
 
 CC := gcc
+PYTHON ?= python
+PROGRAMS_DIR := tests
 
 # compiler flags
 FLAGS := -std=c99 -Wall -Wextra -O3 -g -fno-common -I. -Ivm -Iio
@@ -22,6 +24,7 @@ WIN_CLEAN := $(subst /,\,$(OBJS) $(DEPS) $(TARGET))
 
 clean:
 	-@del /Q $(WIN_CLEAN) 2>NUL
+	-@if exist $(PROGRAMS_DIR) rmdir /S /Q $(PROGRAMS_DIR)
 
 else
 TARGET := vm
@@ -29,12 +32,16 @@ RUN    := ./$(TARGET)
 
 clean:
 	$(RM) $(OBJS) $(DEPS) $(TARGET)
+	$(RM) -r $(PROGRAMS_DIR)
 endif
 
 # default rm for non-windows
 RM := rm -f
 
-all: $(TARGET)
+all: programs $(TARGET)
+
+programs:
+	$(PYTHON) test.py
 
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
