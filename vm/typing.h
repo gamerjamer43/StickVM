@@ -6,23 +6,16 @@
  * just to seperate this from the general vm header
  *
  *
- * Instruction -> uint32_t (to use fixed 32 bit packed ints for instructions)
- * IField      -> uint8_t  (to extract specific fields from the packed instruction)
+ * Instruction -> u32 (to use fixed 32 bit packed ints for instructions)
  *
- * ValueType -> enum       (primitive type spec, read through to see all the primitives)
+ *
+ * Type     -> enum        (to properly extract the packed value, see macros for types)
  * FuncType -> enum        (2 options, NATIVE function from C, or a normal BYTECODE function)
  *
  * TODO: figure out how to deal with bit width besides holding everything as an int
  * Value -> struct, fields:
- * - ValueType type;       (you know what this means, the type the Value currently has attatched to it)
- * - union as;             (so you can hold that object based on its type)
- *   - bool b;             (for BOOL)
- *   - int64_t i;          (for I64)
- *   - uint64_t u;         (for U64)
- *   - float f;            (for FLOAT)
- *   - double d;           (for DOUBLE)
- *   - Func* f;            (for CALLABLE)
- *   - void* o;            (for OBJ, points to heap object)
+ * - u8 type;         (you know what this means, the type the Value currently has attatched to it)
+ * - u8 val[8];   (the bitwise value of that type, up to 8 bytes. u/i128 will be heap allocated, or stored low/high in 2 registers)
  *
  * Func -> struct, fields:
  * - FuncType kind;        (either BYTECODE for local or NATIVE for C)
@@ -31,14 +24,14 @@
  *   - NativeFunc nat;     (for NATIVE functions)
  *
  * BytecodeFunc -> struct, fields:
- * - uint32_t entry_ip;    (instruction index where function starts)
- * - uint16_t argc;        (number of arguments)
- * - uint16_t regc;        (number of registers needed)
+ * - u32 entry_ip;    (instruction index where function starts)
+ * - u16 argc;        (number of arguments)
+ * - u16 regc;        (number of registers needed)
  *
  * NativeFunc -> struct, fields:
  * - NativeFn fn;          (pointer to the C native function)
- * - uint16_t argc;        (number of arguments)
- * - uint16_t _pad;        (padding for alignment)
+ * - u16 argc;        (number of arguments)
+ * - u16 _pad;        (padding for alignment)
  */
 
 #ifndef TYPING_H
@@ -47,11 +40,23 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// various aliases (as i hate how long stdint names r)
+typedef uint8_t  u8;
+typedef int8_t   i8;
+typedef uint16_t u16;
+typedef int16_t  i16;
+typedef uint32_t u32;
+typedef int32_t  i32;
+typedef uint64_t u64;
+typedef int64_t  i64;
+
 // instructions are 32 bit packed. (opcode << 24 | src0 << 16 | src1 << 8 | src2 << 0)
-typedef uint32_t Instruction;
+typedef u32 Instruction;
+
+// fields, used both for extracting instructions, and the byte arrays attached to Value.val
+typedef u8 Field;
 
 // type listing up here (1 byte instead of 8)
-typedef uint8_t ValueType;
 #define NUL       0   // standard "None"/"null" type
 #define BOOL      1   // a true or false value (represented by 0 or 1)
 #define U64       2   // an unsigned 64 bit integer
@@ -72,21 +77,15 @@ typedef enum {
 // forward declare AND create alias for both (may not do for Value as idk if i need)
 typedef struct Func Func;
 
-// i'm trying to figure this out but my issue at hand is the compiler will still pad to 16 bytes
-// my thought is just add a bump allocator and store a handle which corresponds to that value, though runtime startup may suffer
+// standardized 9 byte value struct, problem with padding solved due to val array
+// TODO: figure out if i can do dynamic widths or if i would just want whole new structs.
+// C obv don't have inheritance, so can't inherit Value and force a width on val
 typedef struct Value {
-    ValueType type;
+    u8 type;
 
-    // store the value properly typed
-    union {
-        bool     b;
-        int64_t  i;
-        uint64_t u;
-        float    f;
-        double   d;
-        Func*    fn;
-        void*    obj;  // points to the objects location on the heap
-    } as;
+    // store the payload inside of 8 reserved bytes
+    // this can literally do any type on the stack, or pointers to the heap
+    u8 val[8];
 } Value;
 
 // object types
@@ -110,19 +109,21 @@ typedef struct VM VM;
 
 // allow C natives (pointer to a function that takes these args, this is a feature of the language)
 // to be properly passed to value
-typedef Value (*NativeFn)(VM* vm, Value* args, uint16_t argc);
+typedef Value (*NativeFn)(VM* vm, Value* args, u16 argc);
 
 // function types
 typedef struct {
-    uint32_t entry_ip;  // instruction index
-    uint16_t argc;      // how many args this takes
-    uint16_t regc;      // how many registers this call needs when it runs
+    u32 entry_ip;  // instruction index
+
+    // TODO: decide if this is 16 bit or 8 bit. instructions only rly allow for 8 bit
+    u16 argc;      // how many args this takes
+    u16 regc;      // how many registers this call needs when it runs
 } BytecodeFunc;
 
 typedef struct {
     NativeFn  fn;       // pointer to the C native function
-    uint16_t  argc;     // how many args this takes
-    uint16_t  _pad;     // keep alignment nice
+    u16  argc;     // how many args this takes
+    u16  _pad;     // keep alignment nice
 } NativeFunc;
 
 // properly resolve both bytecode and native functions as callables

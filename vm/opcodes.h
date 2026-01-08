@@ -24,8 +24,8 @@ typedef enum {
 
     // move instruction pointer
     JMP,       // offset instruction pointer by a signed 32 bit value
-    JMPIF,     // if src0 != 0, IP += (int32_t)src1
-    JMPIFZ,    // if src0 == 0, IP += (int32_t)src1
+    JMPIF,     // if src0 != 0, IP += (i32)src1
+    JMPIFZ,    // if src0 == 0, IP += (i32)src1
 
     // movement and storage
     COPY,      // copy a value from one register to another (no nulling)
@@ -98,10 +98,10 @@ typedef enum {
     // conversions
     I2D,       // int to double. dst = (double)src1
     I2F,       // int to float. dst = (float)src1
-    D2I,       // double to int. dst = (int64_t)src1
-    F2I,       // float to int. dst = (int64_t)src1
-    I2U,       // signed to unsigned 64 bit. dst = (uint64_t)src1
-    U2I,       // unsigned to signed 64 bit. dst = (int64_t)src1
+    D2I,       // double to int. dst = (i64)src1
+    F2I,       // float to int. dst = (i64)src1
+    I2U,       // signed to unsigned 64 bit. dst = (u64)src1
+    U2I,       // unsigned to signed 64 bit. dst = (i64)src1
 
     // more here
 } Opcode;

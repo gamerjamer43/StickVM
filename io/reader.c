@@ -4,11 +4,11 @@ bool read_exact(FILE* f, void* out, size_t n) {
     return fread(out, 1, n, f) == n;
 }
 
-uint16_t read_u16_le(const uint8_t b[2]) {
-    return (uint16_t)b[0] | ((uint16_t)b[1] << 8);
+u16 read_u16_le(const u8 b[2]) {
+    return (u16)b[0] | ((u16)b[1] << 8);
 }
 
-uint32_t read_u32_le(const uint8_t b[4]) {
+u32 read_u32_le(const u8 b[4]) {
     return pack(b[3], b[2], b[1], b[0]);
 }
 
@@ -29,7 +29,7 @@ bool vm_load_file(VM* vm, const char* path) {
 
     // header shit (3 = truncated header, make sure it's exactly 20 bytes).
     // it goes: STIK <2 byte version> <2 byte flags> <4 byte instruction count> <4 byte constant count> <4 byte global count>
-    uint8_t magic[4], vbuf[2], fbuf[2], icount[4], ccount[4], gcount[4];
+    u8 magic[4], vbuf[2], fbuf[2], icount[4], ccount[4], gcount[4];
 
     if (
         !read_exact(f, magic, 4)  ||
@@ -50,13 +50,13 @@ bool vm_load_file(VM* vm, const char* path) {
     }
 
     // pulled from the file
-    uint16_t version     = read_u16_le(vbuf);
-    uint32_t count       = read_u32_le(icount);
-    uint32_t constcount  = read_u32_le(ccount);
-    uint32_t globalcount = read_u32_le(gcount);
+    u16 version     = read_u16_le(vbuf);
+    u32 count       = read_u32_le(icount);
+    u32 constcount  = read_u32_le(ccount);
+    u32 globalcount = read_u32_le(gcount);
 
     // also pulled but unused frn i'll let the compiler keep warning me
-    uint16_t flags       = read_u16_le(fbuf);
+    u16 flags       = read_u16_le(fbuf);
 
     // version check (5 = unsupported version)
     if (version != VERSION) {
@@ -71,7 +71,7 @@ bool vm_load_file(VM* vm, const char* path) {
     }
 
     // prevent overflow in malloc
-    if (count > (UINT32_MAX / (uint32_t)sizeof(Instruction))) {
+    if (count > (UINT32_MAX / (u32)sizeof(Instruction))) {
         err = 7; // too big
         goto fail_file;
     }
@@ -91,7 +91,7 @@ bool vm_load_file(VM* vm, const char* path) {
     Value* consts = NULL;
     if (constcount > 0) {
         consts = (Value*)malloc(constcount * sizeof(Value));
-        if (!consts || !read_exact(f, (uint8_t*)consts, constcount * sizeof(Value))) {
+        if (!consts || !read_exact(f, (u8*)consts, constcount * sizeof(Value))) {
             err = 10;  // const pool read failed
             free(consts);
             goto fail_code;
@@ -102,7 +102,7 @@ bool vm_load_file(VM* vm, const char* path) {
     Value* globals = NULL;
     if (globalcount > 0) {
         globals = (Value*)malloc(globalcount * sizeof(Value));
-        if (!globals || !read_exact(f, (uint8_t*)globals, globalcount * sizeof(Value))) {
+        if (!globals || !read_exact(f, (u8*)globals, globalcount * sizeof(Value))) {
             err = 11;  // globals read failed
             free(globals);
             free(consts);

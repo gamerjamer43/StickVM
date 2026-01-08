@@ -15,7 +15,7 @@
   - Set up some basic function types for both bytecode and native (just a pointer to a native function w some extra necessary data) functions
 - vm.h (created):
   - Established truthiness with basic types (based on what type Value contains)
-  - Set up how we handle instructions (uint32_t, pulling different sections of u8 from the u32, as its packed)
+  - Set up how we handle instructions (u32, pulling different sections of u8 from the u32, as its packed)
   - Forward declared object types we may need (stubbed for rn)
   - Set up basic stack frame handling, which seems simple but has been rly hard for me to fully grasp lol.
   - Set up VM with some shit we may need. Added instruction stream, const pools, program globals, frame management, and a panic code (in case we exit with errors)
@@ -41,7 +41,7 @@
   - made truthiness with functions work off what returns from the call
   - added vm_call (function calls) and vm_load (load the entire binary properly into the VM, setup IP and all other shit)
 - typing.h:
-  - added IField (legit just uint8_t)
+  - added IField (legit just u8)
   - moved shit around so it would actually compile (i forgot to forward decl VM above everything)
 - MAKEFILE (created)
   - to make my life easier
@@ -74,7 +74,7 @@
 - opcodes.h:
   - another small note on potentially treating strings as char arrays instead of their own obj
 - vm.h:
-  - added array LEN helper, returns a uint32_t (and used a macro to avoid pointer decay)
+  - added array LEN helper, returns a u32 (and used a macro to avoid pointer decay)
   - tightened docs v minorly
 - vm.c:
   - remove the test we had in favor of loading from a written binary
@@ -97,4 +97,4 @@
   - updated to properly use -I, now compiling whats in vm/ and io/
 
 # TODO:
-  - need to finish this log i forgot to add 6 and 6.5 (skipping 7 L)
+  - log commits 6 thru 9
