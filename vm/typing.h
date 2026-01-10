@@ -5,9 +5,7 @@
  * the instruction typedef, type enum, and value struct all live here
  * just to seperate this from the general vm header
  *
- *
  * Instruction -> u32 (to use fixed 32 bit packed ints for instructions)
- *
  *
  * Type     -> enum        (to properly extract the packed value, see macros for types)
  * FuncType -> enum        (2 options, NATIVE function from C, or a normal BYTECODE function)
@@ -56,7 +54,7 @@ typedef u32 Instruction;
 // fields, used both for extracting instructions, and the byte arrays attached to Value.val
 typedef u8 Field;
 
-// type listing up here (1 byte instead of 8)
+// type listing up here (maybe enum idk)
 #define NUL       0   // standard "None"/"null" type
 #define BOOL      1   // a true or false value (represented by 0 or 1)
 #define U64       2   // an unsigned 64 bit integer
@@ -121,7 +119,7 @@ typedef struct {
 } BytecodeFunc;
 
 typedef struct {
-    NativeFn  fn;       // pointer to the C native function
+    NativeFn fn;  // pointer to the C native function
     u16  argc;     // how many args this takes
     u16  _pad;     // keep alignment nice
 } NativeFunc;

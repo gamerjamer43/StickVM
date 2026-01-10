@@ -35,6 +35,8 @@ bool vm_load_file(VM* vm, const char* path) {
         !read_exact(f, magic, 4)  ||
         !read_exact(f, vbuf, 2)   ||
         !read_exact(f, fbuf, 2)   ||
+
+        // TODO: look into making icount 8 bytes
         !read_exact(f, icount, 4) ||
         !read_exact(f, ccount, 4) ||
         !read_exact(f, gcount, 4)
@@ -59,7 +61,8 @@ bool vm_load_file(VM* vm, const char* path) {
     u16 flags       = read_u16_le(fbuf);
 
     // version check (5 = unsupported version)
-    if (version != VERSION) {
+    // versions should be backwards compatible
+    if (version > VERSION) {
         err = 5;
         goto fail_file;
     }
@@ -70,7 +73,8 @@ bool vm_load_file(VM* vm, const char* path) {
         goto fail_file;
     }
 
-    // prevent overflow in malloc
+    // prevent overflow in malloc (4b instrs = failure)
+    // TODO: read line 39 nincompoop
     if (count > (UINT32_MAX / (u32)sizeof(Instruction))) {
         err = 7; // too big
         goto fail_file;

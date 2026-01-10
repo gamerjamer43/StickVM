@@ -127,6 +127,10 @@ static inline i32 op_signed_i24(Instruction ins) {
     return ((i32)(ins << 8)) >> 8;
 }
 
+// each frame (and the VM itself) would manage a max of 256 locals. (locals live in registers)
+// max of 256 globals (globals live in the global pool)
+// 
+
 // call frames
 typedef struct Frame {
     u32   return_ip;  // where to continue after RET

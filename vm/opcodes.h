@@ -30,7 +30,7 @@ typedef enum {
     // movement and storage
     COPY,      // copy a value from one register to another (no nulling)
     MOVE,      // move values between registers (null the previous register)
-    LOADI,    // load an immediate value -32768 to 32767
+    LOADI,     // load an immediate value -32768 to 32767
     LOADC,     // load constant into src0     C = constant
     LOADG,     // load global into src0
     STOREG,    // store global into the table G = global
@@ -71,10 +71,8 @@ typedef enum {
     NOT,       // bitwise not src1 by src2 and store in src0
 
     // shifts
-    SHL,       // shift left src1 by src2 and store in src0 (signed ints)
-    SHLU,      // shift left src1 by src2 and store in src0 (unsigned ints)
-    SHR,       // shift right src1 by src2 and store in src0 (signed ints)
-    SHRU,      // shift right src1 by src2 and store in src0 (unsigned ints)
+    SHL,       // shift left src1 by src2 and store in src0 (signed ints only)
+    SHR,       // shift right src1 by src2 and store in src0 (signed ints only)
     SAR,       // arithmetic shift right src1 by src2 and store in src0 (signed ints only)
 
     // heap

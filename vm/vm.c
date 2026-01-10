@@ -13,6 +13,8 @@
 void vm_init(VM* vm) {
     if (!vm) return;
     *vm = (VM){0};
+
+    // TODO: potentially limit registers and frames here (maxregs and maxframes)
 }
 
 /**
@@ -55,6 +57,7 @@ void vm_free(VM* vm) {
     }
 
     // reset non-owned fields to safe defaults. null out constant pool
+    // TODO: i am not freeing the constant pool. pissing memory
     vm->consts     = NULL;
     vm->constcount = 0;
     vm->ip         = 0;
@@ -209,6 +212,7 @@ static inline bool copy(VM* vm, u32 dest, u32 src) {
 
 /**
  * main vm run loop. while ip < icount execute instructions (may move this)
+ * potentially look into a dispatch table, as hash lookup would prob speed up some already tight hot loops
  * return false if we do not properly hit a halt, or if we hit panic
  * @param vm the `VM` with instructions loaded into it (vm_load)
  */

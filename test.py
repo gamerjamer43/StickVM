@@ -77,6 +77,7 @@ TESTS: list[tuple[str, NDArray[uint32], list[bytes], list[bytes]]] = [
     ),
 
     # copy should preserve non-zero into the destination register (and source, copied from below)
+    # this test doesnt look right
     # jumps over halt to panic if value in register 1 is 0 (passed)
     test(
         "copy_nonzero",
