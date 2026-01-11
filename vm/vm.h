@@ -94,6 +94,10 @@
 // legit just an array helper. properly sizes instructions. do not pass anything that isnt an array into this
 #define LEN(a) ((u32)(sizeof(a) / sizeof((a)[0])))
 
+// max amount of registers and frames we can grow to
+#define MAX_REGISTERS 65536
+#define MAX_FRAMES 256
+
 // pack instructions (shift everything to its proper location)
 static inline Instruction pack(Field op, Field a, Field b, Field c) {
     return ((u32)op << 24) | ((u32)a << 16) | ((u32)b << 8) | ((u32)c);
@@ -129,11 +133,11 @@ static inline i32 op_signed_i24(Instruction ins) {
 
 // each frame (and the VM itself) would manage a max of 256 locals. (locals live in registers)
 // max of 256 globals (globals live in the global pool)
-// 
+//
 
 // call frames
 typedef struct Frame {
-    u32   return_ip;  // where to continue after RET
+    u32   ret_ip;     // where to continue after RET
     u16   base;       // base register index in vm -> regs for this call
     u16   regc;       // number of registers reserved for this frame
     Func* callee;     // function currently being executed

@@ -58,8 +58,12 @@ void vm_free(VM* vm) {
 
     // reset non-owned fields to safe defaults. null out constant pool
     // TODO: i am not freeing the constant pool. pissing memory
-    vm->consts     = NULL;
-    vm->constcount = 0;
+    if (vm->consts) {
+        free(vm->consts);
+        vm->consts = NULL;
+        vm->constcount = 0;
+    }
+
     vm->ip         = 0;
     vm->panic_code = 0;
 }
@@ -136,10 +140,25 @@ void vm_load(
  */
 static inline bool ensure_regs(VM* vm, u32 need) {
     if (!vm) return false;
+
+    if (need > MAX_REGISTERS) {
+        vm->panic_code = 12; // need greater than allowed (really tryna use more than 65536 vars local to this scope???)
+        return false;
+    }
+
     if (need <= vm->maxregs) return true;
 
     // resize or code 8 (out of memory)
-    Value* regs = (Value*)realloc(vm->regs, (size_t)need * sizeof(Value));
+    // im gonna do this w a while loop ive just been unmotivated
+    u32 resize = vm->maxregs * 2;
+
+    // TODO: figure out how to counteract 2 byte register indexing (locals)
+    if (resize == vm->maxregs) {
+        vm->panic_code = 8;
+        return false;
+    }
+
+    Value* regs = (Value*)realloc(vm->regs, resize);
     if (!regs) {
         vm->panic_code = 8;
         return false;
@@ -222,6 +241,11 @@ bool vm_run(VM* vm) {
 
     // default 0, panic = 0 means no errors
     vm->panic_code = 0;
+
+    // push the initial frame
+    // vm->frames;
+    // vm->framecount++;
+
     while (vm->ip < vm->icount) {
         // pull current instruction and increment ip
         Instruction ins = vm->istream[vm->ip++];

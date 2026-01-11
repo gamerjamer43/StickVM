@@ -13,6 +13,9 @@ u32 read_u32_le(const u8 b[4]) {
 }
 
 
+// won't have to edit much. it seems to be working just fine, const and global pool is all good (though all are fixed at a 4 byte count max)
+// so legitimately just widen some counts and that's all. maybe do a 32 byte header:
+// <4 byte magic> <2 byte version> <2 byte flags> <8 byte instruction count> <8 byte constant count> <8 byte global count>
 bool vm_load_file(VM* vm, const char* path) {
     if (!vm || !path) return false;
 
