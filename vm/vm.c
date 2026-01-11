@@ -139,10 +139,8 @@ void vm_load(
  * @param need a u32 proclaiming how many registers are needed
  */
 static inline bool ensure_regs(VM* vm, u32 need) {
-    if (!vm) return false;
-
-    if (need > MAX_REGISTERS) {
-        vm->panic_code = 12; // need greater than allowed (really tryna use more than 65536 vars local to this scope???)
+    if (!vm || need > MAX_REGISTERS) {
+        if (vm) vm->panic_code = 12; // need greater than allowed (really tryna use more than 65536 vars local to this scope???)
         return false;
     }
 
@@ -169,6 +167,55 @@ static inline bool ensure_regs(VM* vm, u32 need) {
     memset(regs + vm->maxregs, 0, (newsize - vm->maxregs) * sizeof(Value));
     vm->regs = regs;
     vm->maxregs = newsize;
+    return true;
+}
+
+/**
+ * add a frame to the stack
+ */
+static inline bool push_frame(VM* vm, Frame *frame) {
+    if (!vm || !frame) return false;
+
+    // grows will be x2 here too, base of 8
+    if (vm->framecount >= vm->maxframes) {
+        u32 newmax = vm->maxframes == 0 ? 8 : vm->maxframes * 2;
+        if (newmax > MAX_FRAMES) newmax = MAX_FRAMES;
+
+        // already at max capacity
+        if (vm->framecount >= newmax) {
+            vm->panic_code = 13; // stack overflow
+            return false;
+        }
+
+        // alloc, poll, and set counters properly
+        Frame* newframes = (Frame*)realloc(vm->frames, newmax * sizeof(Frame));
+        if (!newframes) {
+            vm->panic_code = 8;
+            return false;
+        }
+        vm->frames = newframes;
+        vm->maxframes = newmax;
+    }
+
+    // push the frame
+    vm->frames[vm->framecount++] = *frame;
+    return true;
+}
+
+/**
+ * pop a frame from the stack
+ * @param vm the vm instance
+ * @param out optional pointer to store the popped frame
+ */
+static inline bool pop_frame(VM* vm, Frame *out) {
+    if (!vm || vm->framecount == 0) {
+        if (vm) vm->panic_code = 14; // stack underflow
+        return false;
+    }
+    vm->framecount--;
+
+    // TODO: look into coroutines, generators, and etc. this is why it's a "pop" not a destruction
+    if (out) *out = vm->frames[vm->framecount];
     return true;
 }
 
