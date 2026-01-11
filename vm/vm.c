@@ -59,7 +59,7 @@ void vm_free(VM* vm) {
     // reset non-owned fields to safe defaults. null out constant pool
     // TODO: i am not freeing the constant pool. pissing memory
     if (vm->consts) {
-        free(vm->consts);
+        free((void*)vm->consts);
         vm->consts = NULL;
         vm->constcount = 0;
     }
@@ -148,28 +148,27 @@ static inline bool ensure_regs(VM* vm, u32 need) {
 
     if (need <= vm->maxregs) return true;
 
-    // resize or code 8 (out of memory)
-    // im gonna do this w a while loop ive just been unmotivated
-    u32 resize = vm->maxregs * 2;
-
-    // TODO: figure out how to counteract 2 byte register indexing (locals)
-    if (resize == vm->maxregs) {
-        vm->panic_code = 8;
-        return false;
+    // double if we need more. default 8
+    u32 newsize = vm->maxregs == 0 ? 8 : vm->maxregs;
+    while (newsize < need) {
+        u32 doubled = newsize * 2;
+        if (doubled <= newsize || doubled > MAX_REGISTERS) {
+            newsize = need;
+            break;
+        }
+        newsize = doubled;
     }
 
-    Value* regs = (Value*)realloc(vm->regs, resize);
+    Value* regs = (Value*)realloc(vm->regs, newsize * sizeof(Value));
     if (!regs) {
         vm->panic_code = 8;
         return false;
     }
 
-    // zero initialize registers
-    memset(regs + vm->maxregs, 0, (need - vm->maxregs) * sizeof(Value));
-
-    // set properly and return true (no error)
+    // zero initialize new registers and return
+    memset(regs + vm->maxregs, 0, (newsize - vm->maxregs) * sizeof(Value));
     vm->regs = regs;
-    vm->maxregs = need;
+    vm->maxregs = newsize;
     return true;
 }
 
