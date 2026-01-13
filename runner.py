@@ -6,14 +6,15 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-
 def main():
     a = ArgumentParser(description="Official set of StickVM opcode tests provided. If you do your own just reference the folder.")
-    a.add_argument("-p", "--path", default="./vm.exe", help="Path to VM executable")
+    a.add_argument("-p", "--path", default="./vmm", help="Path to VM executable")
     a.add_argument("-d", "--dir", default="tests", help="Directory containing .stk files")
-    args = a.parse_args()
+    a.add_argument("-c", "--cmd", default="", help="Command to prepend (e.g., 'valgrind --leak-check=full')")
+    a.add_argument("-v", "--verbose", action="store_true", help="Show output from each test in real-time")
 
     # setup
+    args = a.parse_args()
     console = Console()
     tests = sorted(Path(args.dir).glob("*.stk"))
     
@@ -22,11 +23,16 @@ def main():
 
     passed, failed, results = [], [], []
     console.print(f"[yellow]Running {len(tests)} tests...[/]")
+    valgrind = args.cmd and "valgrind" in args.cmd
     for test in tests:
-        result = run([args.path, str(test)], capture_output=True, text=True)
+        cmd = args.cmd.split() if args.cmd else []
+        result = run(cmd + [args.path, str(test)], capture_output=not args.verbose, text=True)
         
-        # 0 == pass (except panic then it shouldnt be 0)
-        if result.returncode == 0 or (test.name.startswith("testop1_") and result.returncode != 0):
+        # valgrind returns 0, 1 instead
+        if valgrind: code = result.returncode in (0, 1)
+        else: code = result.returncode == 0
+        
+        if code:
             passed.append(test.name)
             console.print(f"[green]✓[/] {test.name}")
             results.append((test.name, "[green]PASS[/]", str(result.returncode)))
