@@ -43,7 +43,7 @@ void vm_free(VM* vm) {
         free(vm->frames);
         vm->frames = NULL;
         vm->framecount = 0;
-        vm->maxframes = 0;
+        vm->framecap = 0;
     }
 
 
@@ -151,8 +151,8 @@ static inline bool push_frame(VM* vm, Frame *frame) {
     if (!vm || !frame) return false;
 
     // grows will be x2 here too, base of 8
-    if (vm->framecount >= vm->maxframes) {
-        u32 newmax = vm->maxframes == 0 ? 8 : vm->maxframes * 2;
+    if (vm->framecount >= vm->framecap) {
+        u32 newmax = vm->framecap == 0 ? 8 : vm->framecap * 2;
         if (newmax > MAX_FRAMES) newmax = MAX_FRAMES;
 
         // already at max capacity
@@ -168,7 +168,7 @@ static inline bool push_frame(VM* vm, Frame *frame) {
             return false;
         }
         vm->frames = newframes;
-        vm->maxframes = newmax;
+        vm->framecap = newmax;
     }
 
     // push the frame

@@ -13,3 +13,6 @@
 # bytecode format planning
 spec.md
 TODO
+
+# trying to get this down from 700 fucking lines. this is 50% python cuz im not modularizing right lmao
+testbackup700l.py

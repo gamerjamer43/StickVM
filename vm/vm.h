@@ -203,8 +203,8 @@ typedef struct VM {
     // call stack
     Frame* frames;
     Frame* current;
-    u32    framecount;
-    u32    maxframes;
+    u32    framecount;  // current count
+    u32    framecap;    // max that can be filled BEFORE A RESIZE. max TOTAL is 65536 (MAX_REGISTERS)
 
     // last error/panic info
     u32 panic_code;

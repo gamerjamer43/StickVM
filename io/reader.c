@@ -110,6 +110,35 @@ bool vm_load_file(VM* vm, const char* path) {
             free(consts);
             goto fail_code;
         }
+        
+        // turn packed callables into function pointers at load time (avoids runtime bs for a little startup delay whateverrrrr)
+        for (u32 i = 0; i < constcount; i++) {
+            if (consts[i].type != CALLABLE) continue;
+
+            // copy vals out
+            u32 entry_ip;
+            u16 argc, regc;
+            memcpy(&entry_ip, &consts[i].val[0], sizeof(u32));
+            memcpy(&argc, &consts[i].val[4], sizeof(u16));
+            memcpy(&regc, &consts[i].val[6], sizeof(u16));
+            
+            // malloc and poll
+            Func* fn = (Func*)malloc(sizeof(Func));
+            if (!fn) {
+                err = 8;
+                free(consts);
+                goto fail_code;
+            }
+
+            // fill function, then patch old callable space to store the new function pointer
+            // i could do this with pointer packing but i have 8 bits so i don't necessarily need to?
+            fn->kind = BYTECODE;
+            fn->as.bc.entry_ip = entry_ip;
+            fn->as.bc.argc = argc;
+            fn->as.bc.regc = regc;
+            memcpy(consts[i].val, &fn, sizeof(Func*));
+        
+        }
     }
 
     // lastly the global pool
