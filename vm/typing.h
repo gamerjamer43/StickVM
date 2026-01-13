@@ -55,14 +55,23 @@ typedef u32 Instruction;
 typedef u8 Field;
 
 // type listing up here (maybe enum idk)
-#define NUL       0   // standard "None"/"null" type
-#define BOOL      1   // a true or false value (represented by 0 or 1)
-#define U64       2   // an unsigned 64 bit integer
-#define I64       3   // a signed 64 bit integer
-#define FLOAT     4   // a 32 bit single precision float
-#define DOUBLE    5   // a 64 bit double precision float
-#define OBJ       6   // a general object
-#define CALLABLE  7   // a callable
+enum Type {
+    NUL      = 0,   // standard "None"/"null" type
+    BOOL     = 1,   // a true or false value (represented by 0 or 1)
+    U64      = 2,   // an unsigned 64 bit integer
+    I64      = 3,   // a signed 64 bit integer
+    FLOAT    = 4,   // a 32 bit single precision float
+    DOUBLE   = 5,   // a 64 bit double precision float
+    OBJ      = 6,   // a general object
+    CALLABLE = 7,   // a callable
+};
+
+// starting amount of registers for entry frame
+#define BASE_REGISTERS 16
+
+// max amount of registers and frames we can grow to
+#define MAX_REGISTERS 65536
+#define MAX_FRAMES 256
 
 // support for native C functions will be added.
 // this is so webservers and shit can exist
@@ -71,20 +80,22 @@ typedef enum {
     NATIVE,
 } FuncType;
 
-
 // forward declare AND create alias for both (may not do for Value as idk if i need)
 typedef struct Func Func;
 
-// standardized 9 byte value struct, problem with padding solved due to val array
-// TODO: figure out if i can do dynamic widths or if i would just want whole new structs.
-// C obv don't have inheritance, so can't inherit Value and force a width on val
-typedef struct Value {
+// standardized 9 byte value struct, problem with padding solved due to u8 packing
+// problem with overhead solved due to register file
+typedef struct {
     u8 type;
-
-    // store the payload inside of 8 reserved bytes
-    // this can literally do any type on the stack, or pointers to the heap
     u8 val[8];
 } Value;
+
+// this is either gonna be a pointer to a val, or a payload containing a value. width is canonical
+// so you can use u8 but extensions r basically noop.
+typedef struct {
+    u64 payloads[MAX_REGISTERS];
+    u8  types[MAX_REGISTERS];
+} Registers;
 
 // object types
 typedef struct Obj Obj; // dunno how to do this yet
@@ -106,8 +117,8 @@ typedef struct ObjTable ObjTable;  // write a hashtable impl for this
 typedef struct VM VM;
 
 // allow C natives (pointer to a function that takes these args, this is a feature of the language)
-// to be properly passed to value
-typedef Value (*NativeFn)(VM* vm, Value* args, u16 argc);
+// to be properly passed to value. base is the register index where args start
+typedef void (*NativeFn)(VM* vm, u32 base, u16 argc, u32 dest);
 
 // function types
 typedef struct {

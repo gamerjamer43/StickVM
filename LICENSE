@@ -1,4 +1,4 @@
-Unnamed bytecode VM, meant to parse bytecode from AST parsed by a Rust frontend, language unnamed.
+Bytecode VM, meant to parse bytecode for the Stick programming language. Parsed from AST parsed by a Rust frontend.
 Copyright (C) 2025 Noah Mingolelli
 
                     GNU GENERAL PUBLIC LICENSE

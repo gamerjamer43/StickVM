@@ -25,12 +25,10 @@ void vm_free(VM* vm) {
     // if already nulled no worry
     if (vm == NULL) return;
 
-    // TODO: avoid ownership transfers, and if we do transfer ownership (like the const pool or istream)
-    // fuck with this to avoid a double free.
+    // free any leftovers
     if (vm->regs) {
         free(vm->regs);
         vm->regs = NULL;
-        vm->maxregs = 0;
     }
 
     // free instruction stream (casting to void pointer shuts the compiler up)
@@ -53,7 +51,7 @@ void vm_free(VM* vm) {
     if (vm->globals) {
         free(vm->globals);
         vm->globals = NULL;
-        vm->globals_len = 0;
+        vm->globalcount = 0;
     }
 
     // reset non-owned fields to safe defaults. null out constant pool
@@ -70,21 +68,21 @@ void vm_free(VM* vm) {
 
 
 /**
- * load a compiled chunk into the `VM` (VM takes ownership of instruction stream)
- * DO NOT REUSE `VM` OBJECTS
+ * load a compiled chunk into the VM instance. the VM takes ownership of the instructions
+ * DO NOT REUSE A VM
  * @param vm a pointer to the `VM` to load into
  * @param code `Instruction` stream pointer
- * @param code_len `Instruction` count
+ * @param instrcount `Instruction` count
  * @param consts constant pool pointer
- * @param consts_len number of constants
- * @param globals_init initial globals (copied into VM-owned storage)
- * @param globals_len number of globals
+ * @param constcount number of constants
+ * @param globals_init initial globals (copied into owned storage)
+ * @param globalcount number of globals
  */
 void vm_load(
     VM* vm,
-    const Instruction* code, u32 code_len,
-    const Value* consts, u32 consts_len,
-    const Value* globals_init, u32 globals_len
+    const Instruction* code, u32 instrcount,
+    const Value* consts, u32 constcount,
+    const Value* globals_init, u32 globalcount
 ) {
     // if no allocated vm ep ep ep bad boy
     if (!vm) return;
@@ -104,69 +102,45 @@ void vm_load(
     vm->framecount = 0;
 
     // take ownership of the instructions (no copy, 8 = out of memory)
-    if (code_len > 0) {
+    if (instrcount > 0) {
         if (!code) {
             vm->panic_code = 8;
             return;
         }
 
         vm->istream = code;
-        vm->icount = code_len;
+        vm->icount = instrcount;
     }
 
     // set constants to provided pool (will be dealt with on load of file)
     vm->consts = consts;
-    vm->constcount = consts_len;
+    vm->constcount = constcount;
 
     // allocate globals (if necessary, if none just return)
-    if (globals_len == 0) return;
-    vm->globals = (Value*)calloc(globals_len, sizeof(Value));
+    if (globalcount == 0) return;
+    vm->globals = (Value*)calloc(globalcount, sizeof(Value));
     if (!vm->globals) {
         vm->panic_code = 8;
         return;
     }
 
-    vm->globals_len = globals_len;
+    vm->globalcount = globalcount;
     if (globals_init) {
-        memcpy(vm->globals, globals_init, globals_len * sizeof(Value));
+        memcpy(vm->globals, globals_init, globalcount * sizeof(Value));
     }
 }
 
 /**
- * ensure we have enough registers to store a value
+ * ensure we have enough registers to store a value, havent added wides yet but 256 prealloced will do
  * TODO: check if i should allow for > 256 frame local registers (and how spills should be dealt with)
  * @param vm the vm instance to check
  * @param need a u32 proclaiming how many registers are needed
  */
 static inline bool ensure_regs(VM* vm, u32 need) {
-    if (!vm || need > MAX_REGISTERS) {
-        if (vm) vm->panic_code = 12; // need greater than allowed (really tryna use more than 65536 vars local to this scope???)
+    if (need > MAX_REGISTERS) {
+        if (vm) vm->panic_code = 12;
         return false;
     }
-
-    if (need <= vm->maxregs) return true;
-
-    // double if we need more. default 8
-    u32 newsize = vm->maxregs == 0 ? 8 : vm->maxregs;
-    while (newsize < need) {
-        u32 doubled = newsize * 2;
-        if (doubled <= newsize || doubled > MAX_REGISTERS) {
-            newsize = need;
-            break;
-        }
-        newsize = doubled;
-    }
-
-    Value* regs = (Value*)realloc(vm->regs, newsize * sizeof(Value));
-    if (!regs) {
-        vm->panic_code = 8;
-        return false;
-    }
-
-    // zero initialize new registers and return
-    memset(regs + vm->maxregs, 0, (newsize - vm->maxregs) * sizeof(Value));
-    vm->regs = regs;
-    vm->maxregs = newsize;
     return true;
 }
 
@@ -237,42 +211,66 @@ static inline bool jump_rel(VM* vm, i32 off) {
 }
 
 /**
- * when run, if this is a native function it's just called normally (i think maybe i should create a stack frame but TODO)
- * if this is a bytecode function
- */
-bool vm_call(VM *vm, Func *fn, Value *args, u16 argc, Value *out) {
-    if (!vm || !fn) return false;
-
-    switch (fn->kind) {
-        case BYTECODE:
-            // TODO: implement bytecode function usage
-            return false;
-
-        case NATIVE:
-            if (!fn->as.nat.fn || argc != fn->as.nat.argc) return false;
-            Value ret = fn->as.nat.fn(vm, args, argc);
-            if (out) *out = ret;
-            return true;
-
-        default:
-            return false;
-    }
-}
-
-/**
  * copy a value from register to register (nulling does not happen here)
  * @param vm a vm struct to read from
  * @param dest the register to copy to
  * @param src the register to copy from
  */
-static inline bool copy(VM* vm, u32 dest, u32 src) {
+static inline bool copy(VM* vm, u32 dest, u32 src, u32 offset) {
     // assess the need, based on destination or src, and grow if needed
-    u32 need = (dest > src ? dest : src) + 1;
+    u32 need = (dest > src ? dest : src) + vm->current->base + 1;
     if (!ensure_regs(vm, need)) return false;
 
     // move from source to destination, zero out source register
-    vm->regs[dest] = vm->regs[src];
+    vm->regs->types[dest + offset] = vm->regs->types[src + offset];
+    vm->regs->payloads[dest + offset] = vm->regs->payloads[src + offset];
     return true;
+}
+
+/**
+ * when run, if this is a native function it's just called normally (i think maybe i should create a stack frame but TODO)
+ * if this is a bytecode function. base is the register index where args start.
+ */
+bool vm_call(VM *vm, Func *fn, u32 base, u16 argc, u16 reg) {
+    if (!vm || !fn) return false;
+
+    switch (fn->kind) {
+        case BYTECODE: {
+            // validate argc before doing anything
+            if (argc != fn->as.bc.argc) return false;
+
+            // ensure frames (calc via base)
+            Frame* caller = vm->current;
+            u16 new_base = caller->base + caller->regc;
+            if (!ensure_regs(vm, new_base + fn->as.bc.regc)) return false;
+
+            // push frame (safely ofc) and update fp
+            Frame callee_frame = {
+                .jump = vm->ip,
+                .base = new_base,
+                .regc = fn->as.bc.regc,
+                .reg = reg,
+                .callee = fn
+            };
+            if (!push_frame(vm, &callee_frame)) return false;
+            vm->current = &vm->frames[vm->framecount - 1];
+
+            // jump (args are in the first slots so saves us some bullshit)
+            vm->ip = fn->as.bc.entry_ip;
+            return true;
+        }
+
+        // natives r easy legit just a call
+        case NATIVE: {
+            if (!fn->as.nat.fn || argc != fn->as.nat.argc) return false;
+            u32 dest = vm->current->base + reg;
+            fn->as.nat.fn(vm, base, argc, dest);
+            return true;
+        }
+
+        default:
+            return false;
+    }
 }
 
 /**
@@ -283,14 +281,24 @@ static inline bool copy(VM* vm, u32 dest, u32 src) {
  */
 bool vm_run(VM* vm) {
     // init checks
-    if (!vm || !vm->istream) return false;
+    if (!vm || !vm->istream || !vm->regs) return false;
 
     // default 0, panic = 0 means no errors
     vm->panic_code = 0;
 
-    // push the initial frame
-    // vm->frames;
-    // vm->framecount++;
+    // ensure a base of 16 registers for the entry frame
+    if (!ensure_regs(vm, BASE_REGISTERS)) return false;
+
+    // push the initial frame (mark return to the absolute end. deciding if this shud be a panic or if halt should do a return)
+    // everything is safe i believe it's just a design choice, but i do not know for certain so i'll doubt myself
+    Frame entry = {
+        .jump = vm->icount,
+        .base = 0,
+        .regc = BASE_REGISTERS,
+        .callee = NULL
+    };
+    if (!push_frame(vm, &entry)) return false;
+    vm->current = &vm->frames[vm->framecount - 1];
 
     while (vm->ip < vm->icount) {
         // pull current instruction and increment ip
@@ -314,25 +322,40 @@ bool vm_run(VM* vm) {
                 break;
             }
 
+            // dry these up but this should work lol. just check if val isnt zero or false
             case JMPIF: {
-                // not implemented yet, may have to additionally define truthiness
-                vm->panic_code = 9;
-                return false;
-            }
-
-            case JMPIFZ: {
-                u32 src = op_a(ins);
+                u32 src = op_a(ins) + vm->current->base;
                 i32 off = op_signed_i16(ins);
 
                 // make sure register is valid before jumping
-                if (src >= vm->maxregs) {
+                if (src >= MAX_REGISTERS) {
                     vm->panic_code = 1;
                     return false;
                 }
 
                 // if falsy ignore, but if offset invalid, panic
-                // TODO: fix compiler warnings that come with this: if (value_falsy(vm, vm->regs[src])) {
-                if (value_falsy(vm->regs[src])) {
+                u8 type = vm->regs->types[src];
+                u64 payload = vm->regs->payloads[src];
+                if (!value_falsy(type, payload)) {
+                    if (!jump_rel(vm, off)) return false;
+                }
+                break;
+            }
+
+            case JMPIFZ: {
+                u32 src = op_a(ins) + vm->current->base;
+                i32 off = op_signed_i16(ins);
+
+                // make sure register is valid before jumping
+                if (src >= MAX_REGISTERS) {
+                    vm->panic_code = 1;
+                    return false;
+                }
+
+                // if falsy ignore, but if offset invalid, panic
+                u8 type = vm->regs->types[src];
+                u64 payload = vm->regs->payloads[src];
+                if (value_falsy(type, payload)) {
                     if (!jump_rel(vm, off)) return false;
                 }
                 break;
@@ -343,17 +366,18 @@ bool vm_run(VM* vm) {
                 u32 dest = op_a(ins);
                 u32 src  = op_b(ins);
 
-                if (!copy(vm, dest, src)) return false;
+                if (!copy(vm, dest, src, vm->current->base)) return false;
                 break;
             }
 
-            // copy AND null (may combine into one instruction)
+            // copy AND null source
             case MOVE: {
                 u32 dest = op_a(ins);
                 u32 src  = op_b(ins);
 
-                if (!copy(vm, dest, src)) return false;
-                vm->regs[src] = (Value){0};
+                if (!copy(vm, dest, src, vm->current->base)) return false;
+                vm->regs->types[src + vm->current->base] = 0;
+                vm->regs->payloads[src + vm->current->base] = 0;
                 break;
             }
 
@@ -363,17 +387,12 @@ bool vm_run(VM* vm) {
                 i32 imm   = op_signed_i16(ins);
 
                 // ensure registers then make the move
-                if (!ensure_regs(vm, dest + 1)) return false;
+                if (!ensure_regs(vm, dest + vm->current->base + 1)) return false;
 
-                // TODO: change this to decide signed vs unsigned (for rn loading it signed)
-                // as well as bit width. this is just doing i64 for rn. janky approach but if it compiles man
-                Value v;
-                i64 temp;
-                temp = (i64)imm;
-                v.type = I64;
-                memcpy(v.val, &temp, sizeof(imm));
-
-                vm->regs[dest] = v;
+                // adjust for base and set
+                u32 adjusted = dest + vm->current->base;
+                vm->regs->types[adjusted] = I64;
+                vm->regs->payloads[adjusted] = imm;
                 break;
             }
 
@@ -389,8 +408,10 @@ bool vm_run(VM* vm) {
                 }
 
                 // ensure registers then make the move
-                if (!ensure_regs(vm, dest + 1)) return false;
-                vm->regs[dest] = vm->consts[index];
+                u32 adjusted = dest + vm->current->base;
+                if (!ensure_regs(vm, adjusted + 1)) return false;
+                vm->regs->types[adjusted] = vm->consts[index].type;
+                memcpy(&vm->regs->payloads[adjusted], vm->consts[index].val, sizeof(u64));
                 break;
             }
 
@@ -400,80 +421,154 @@ bool vm_run(VM* vm) {
                 u32 index = op_b(ins);
 
                 // if no pool or out of bounds panic (really needa fix this name pollution next)
-                if (!vm->globals || index >= vm->globals_len) {
+                if (!vm->globals || index >= vm->globalcount) {
                     vm->panic_code = 1;
                     return false;
                 }
 
                 // ensure registers then make the move
-                if (!ensure_regs(vm, dest + 1)) return false;
-                vm->regs[dest] = vm->globals[index];
+                u32 adjusted = dest + vm->current->base;
+                if (!ensure_regs(vm, adjusted + 1)) return false;
+                vm->regs->types[adjusted] = vm->globals[index].type;
+                memcpy(&vm->regs->payloads[adjusted], vm->globals[index].val, sizeof(u64));
                 break;
             }
 
             // store a global to the pool
             case STOREG: {
-                u32 dest   = op_a(ins);
+                u32 dest  = op_a(ins);
                 u32 index = op_b(ins);
 
-                if (!vm->globals || index >= vm->globals_len) {
+                if (!vm->globals || index >= vm->globalcount) {
                     vm->panic_code = 1;
                     return false;
                 }
 
-                if (!ensure_regs(vm, dest + 1)) return false;
-
-                vm->globals[index] = vm->regs[dest];
+                // copy with this ugly shite
+                u32 adjusted = dest + vm->current->base;
+                if (!ensure_regs(vm, adjusted + 1)) return false;
+                vm->globals[index].type = vm->regs->types[adjusted];
+                memcpy(vm->globals[index].val, &vm->regs->payloads[adjusted], sizeof(u64));
                 break;
             }
 
-            // add src1 and src2 and store in src0
-            case ADD: {
-                u32 dest = op_a(ins);
-                u32 lhs  = op_b(ins);
-                u32 rhs  = op_c(ins);
+            // call a function: CALL func_reg argc dest
+            case CALL: {
+                u32 reg  = op_a(ins);
+                u16 argc = op_b(ins);
+                u16 dest = op_c(ins);
 
-                if (lhs >= vm->maxregs || rhs >= vm->maxregs) {
+                // bounds check
+                u32 abs = reg + vm->current->base;
+                if (abs >= MAX_REGISTERS) {
                     vm->panic_code = 1;
                     return false;
                 }
 
-                if (!ensure_regs(vm, dest + 1)) return false;
+                // yoink from register
+                u8  type    = vm->regs->types[abs];
+                u64 payload = vm->regs->payloads[abs];
+                if (type != CALLABLE) {
+                    vm->panic_code = 15;
+                    return false;
+                }
 
-                // already run into an issue. continue here
-                // vm->globals[dest] = vm->regs[lhs] + vm->regs[rhs];
+                // extract pointer
+                Func* fn;
+                memcpy(&fn, &payload, sizeof(Func*));
+                if (!fn) {
+                    vm->panic_code = 15;
+                    return false;
+                }
+
+                // pull args and call
+                if (!vm_call(vm, fn, abs + 1, argc, dest)) {
+                    if (vm->panic_code == 0) vm->panic_code = 16;
+                    return false;
+                }
+
                 break;
             }
 
-            // TODO: add JMPIF and JMPIFZ after const and global pool are properly read
+            // return from function: RET register
+            case RET: {
+                u32 ret = op_a(ins);
+                u32 abs = ret + vm->current->base;
+
+                // get return val then pop
+                Frame popped;
+                Value returned = {0};
+                if (abs < MAX_REGISTERS) {
+                    returned.type = vm->regs->types[abs];
+                    memcpy(returned.val, &vm->regs->payloads[abs], sizeof(u64));
+                }
+                
+                // if pop somehow failed GET OUT.
+                if (!pop_frame(vm, &popped)) return false;
+
+                // jump ip back and restore previous state
+                if (vm->framecount == 0) return true;
+                vm->current = &vm->frames[vm->framecount - 1];
+                vm->ip = popped.jump;
+
+                // store return value in caller spec
+                u32 adjusted = vm->current->base + popped.reg;
+                vm->regs->types[adjusted] = returned.type;
+                memcpy(&vm->regs->payloads[adjusted], returned.val, sizeof(u64));
+                break;
+            }
+
+            // (i think) all operators muahahaha
+            case ADD:  BINOP(+);  break;
+            case SUB:  BINOP(-);  break;
+            case MUL:  BINOP(*);  break;
+            case DIV:  BINOP(/);  break;
+            case MOD:  BINOP(%);  break;
+            case AND:  BINOP(&);  break;
+            case OR:   BINOP(|);  break;
+            case XOR:  BINOP(^);  break;
+            case SHL:  BINOP(<<); break;
+            case SHR:  BINOP(>>); break;
+
+            case EQ:   CMPOP(==); break;
+            case NEQ:  CMPOP(!=); break;
+            case GT:   CMPOP(>);  break;
+            case GE:   CMPOP(>=); break;
+            case LT:   CMPOP(<);  break;
+            case LE:   CMPOP(<=); break;
+
+            case NEG:  UNOP(-); break;
+            case BNOT: UNOP(~); break;
+            
+            // lnot has special cases. only can be used on boolean values. gonna fix jmpif and jmpifz to be the same mayb
+            case LNOT: {
+                u32 src = op_a(ins) + vm->current->base;
+                if (src >= MAX_REGISTERS) { 
+                    vm->panic_code = 1; 
+                    return false; 
+                }
+
+                if (!ensure_regs(vm, src + 1)) return false;
+                if (vm->regs->types[src] != BOOL) { 
+                    vm->panic_code = 17; 
+                    return false; 
+                }
+                
+                vm->regs->payloads[src] = vm->regs->payloads[src] ? 0 : 1;
+                break;
+            }
 
             // nothing matched (9 = invalid opcode)
-            default:
+            default: {
                 vm->panic_code = 9;
-                return false;
+                return false;   
+            }
         }
     }
 
     // no halt found
     vm->panic_code = 1;
     return false;
-}
-
-/**
- * basic debug logging. prints all bytecode instructions (as hex values)
- * @param vm a pointer to an initialized `VM` struct with instructions loaded
- */
-void log_instructions(VM *vm) {
-    if (!vm || !vm->istream || vm->icount == 0) {
-        printf("Code: []\n"); return;
-    }
-
-    printf("Code: [");
-    for (int i = 0; (u32)i < vm->icount - 1; i++) {
-        printf("0x%08" PRIX32 ",", vm->istream[i]);
-    }
-    printf("0x%08" PRIX32 "]\n", vm->istream[vm->icount - 1]);
-    // end of section to remove
 }
 
 /**
@@ -497,7 +592,14 @@ int main(int argc, char const *argv[]) {
     }
 
     // check instructions first
-    log_instructions(&vm);
+    if (vm.istream && vm.icount > 0) {
+        printf("Code: [");
+        for (u32 i = 0; i < vm.icount - 1; i++) {
+            printf("0x%08" PRIX32 ",", vm.istream[i]);
+        }
+        printf("0x%08" PRIX32 "]\n", vm.istream[vm.icount - 1]);
+    } 
+    else printf("Code: []\n");
 
     // run returns a status (false with code set if failed)
     bool ok = vm_run(&vm);

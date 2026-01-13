@@ -96,5 +96,47 @@
 - MAKEFILE:
   - updated to properly use -I, now compiling whats in vm/ and io/
 
+---
+
+Skipping to 10. I'll doc/log later. Too busy CODING.
+
+---
+
+# Commit 10:
+### MINOR:
+- LICENSE:
+  - minor update to the description
+- Makefile:
+  - removed -g for speed testing
+- opcodes.h:
+  - added logical not (bitwise not negates all bits durrrr)
+- typing.h:
+  - added registers file (legit 2 arrays. so we don't have to fight w memcpys or alignment. 8 bytes then 1 byte for alignment)
+  - changed some types around (macro defined types -> enum, defined some more macros for register/frame scaling)
+  - added base arg (the base register for this functions storage) to NativeFn
+- vm.h:
+  - name cleaning (i dont wanna list all of them just a lot)
+  - added a pointer to the current frame (idk why i didnt have this b4)
+  - implemented the register file into vm (and need to prolly remove some unused shit)
+  - a macro (3 but i copied it) for binops comp ops and unary ops
+- reader.c:
+  - setup registers on load. will expand if needed but thats TBD
+
+### MAJOR
+- test.py:
+  - added 35 new tests to test every facet of this. i added a lot of operators so i need to test those, and additionally i added some bonuses
+- runner.py:
+  - a unified place to run all my tests. will give you a table of pass/fail and give you stdout/stderr and a "stack trace" for any errors
+- vm.c:
+  - i did way too much...
+  - registers are now preallocated (its 0.65535mb it's jack shit) to avoid expensive realloc
+  - bytecode functions can now (technically) be called, though i dont have full support for call and ret yet. that'll be my next MORE TARGETTED push...
+  - entry frame so the entire program doesnt run on the bare vm. there is now an actual concept of a stack frame besides the struct existing in my header
+  - changed EVERYTHING to use that register file. it did actually help my overhead. so many less memory operations
+  - added CALL, RET, and every single fucking operation (thanks to the macro i wrote and then reused 3 times. TODO: dry that jawn)
+  - inlined log_instructions to remove another function
+
 # TODO:
   - log commits 6 thru 9
+  - modularize
+  - write proper tests for CALL and RET

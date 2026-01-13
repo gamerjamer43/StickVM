@@ -64,11 +64,12 @@ typedef enum {
     LE,        // src0 = (src1 <= src2) (signed)
     LEU,       // src0 = (src1 <= src2) (unsigned)
 
-    // bitwise (and also logical operators as we're gonna do implicit falsiness)
+    // bitwise (and also logical operators as bools make false 0)
     AND,       // bitwise and src1 by src2 and store in src0
     OR,        // bitwise or src1 by src2 and store in src0
     XOR,       // bitwise exclusive or src1 by src2 and store in src0
-    NOT,       // bitwise not src1 by src2 and store in src0
+    LNOT,      // perform a logical negation on src0 (unary)
+    BNOT,      // perform a bitwise negation on src0 (unary)
 
     // shifts
     SHL,       // shift left src1 by src2 and store in src0 (signed ints only)

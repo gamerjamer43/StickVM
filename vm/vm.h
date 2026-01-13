@@ -21,7 +21,7 @@
  *
  * GLOBALS: vm always owns
  * - Value* globals;             (globals storage)
- * - u32 globals_len;            (number of globals)
+ * - u32 globalcount;            (number of globals)
  *
  * FRAMES: all stack frames
  * - Frame* frames;              (call stack array)
@@ -41,9 +41,9 @@
  * - void vm_free(VM* vm);       (release any allocated resources)
  * - void vm_load(               (load a compiled chunk; VM takes ownership of instruction stream)
  *          VM* vm,
- *          const Instruction* code, u32 code_len,
- *          const Value* consts, u32 consts_len,
- *          Value* globals, u32 globals_len
+ *          const Instruction* code, u32 instrcount,
+ *          const Value* consts, u32 constcount,
+ *          Value* globals, u32 globalcount
  *   );
  *
  * - bool vm_run(VM* vm);        (execute until HALT or PANIC; returns success)
@@ -91,12 +91,51 @@
 #define VERSION 1
 // #define FLAG_VERBOSE 0x0001 (gonna add this later)
 
-// legit just an array helper. properly sizes instructions. do not pass anything that isnt an array into this
-#define LEN(a) ((u32)(sizeof(a) / sizeof((a)[0])))
+// general binop helper. can do both boolean and general binary operations
+#define BINOP_GENERIC(result_type_expr, cast_type, result_expr) do { \
+    u32 dest = op_a(ins); \
+    u32 lhs = op_b(ins) + vm->current->base; \
+    u32 rhs = op_c(ins) + vm->current->base; \
+    \
+    if (lhs >= MAX_REGISTERS || rhs >= MAX_REGISTERS) { \
+        vm->panic_code = 1; return false; \
+    } \
+    \
+    u32 adjusted = dest + vm->current->base; \
+    if (!ensure_regs(vm, adjusted + 1)) return false; \
+    \
+    u8 ltype = vm->regs->types[lhs]; \
+    u8 rtype = vm->regs->types[rhs]; \
+    if (ltype != rtype) { vm->panic_code = 17; return false; } \
+    \
+    cast_type lval = (cast_type)vm->regs->payloads[lhs]; \
+    cast_type rval = (cast_type)vm->regs->payloads[rhs]; \
+    \
+    vm->regs->types[adjusted] = (result_type_expr); \
+    vm->regs->payloads[adjusted] = (u64)(result_expr); \
+} while(0)
 
-// max amount of registers and frames we can grow to
-#define MAX_REGISTERS 65536
-#define MAX_FRAMES 256
+// unary op helper. used for like 3 things lmao. reused from my binop helper
+#define UNOP_GENERIC(result_type_expr, cast_type, result_expr) do { \
+    u32 src = op_a(ins) + vm->current->base; \
+    \
+    if (src >= MAX_REGISTERS) { \
+        vm->panic_code = 1; return false; \
+    } \
+    \
+    if (!ensure_regs(vm, src + 1)) return false; \
+    \
+    u8 stype = vm->regs->types[src]; \
+    cast_type val = (cast_type)vm->regs->payloads[src]; \
+    \
+    vm->regs->types[src] = (result_type_expr); \
+    vm->regs->payloads[src] = (u64)(result_expr); \
+} while(0)
+
+// bin op is just normal, cmp op returns a bool, and unary is just whatever type the operand is
+#define BINOP(OP) BINOP_GENERIC(ltype, i64, lval OP rval)
+#define CMPOP(OP) BINOP_GENERIC(BOOL, i64, (lval OP rval) ? 1 : 0)
+#define UNOP(OP)  UNOP_GENERIC(stype, i64, OP val)
 
 // pack instructions (shift everything to its proper location)
 static inline Instruction pack(Field op, Field a, Field b, Field c) {
@@ -109,7 +148,7 @@ static inline u32 op_a  (Instruction ins) { return (ins >> 16) & 0xFFu; }
 static inline u32 op_b  (Instruction ins) { return (ins >>  8) & 0xFFu; }
 static inline u32 op_c  (Instruction ins) { return (ins >>  0) & 0xFFu; }
 
-// for LOADI16 (which i may find use elsewhere but just to clean it for rn)
+// for JMP (which i may find use elsewhere but just to clean it for rn)
 // relies on the same behavior as below
 /**
  * does a sign extension of the last 2 bytes of the instruction
@@ -121,6 +160,7 @@ static inline i32 op_signed_i16(Instruction ins) {
 }
 
 // for JMPW and other wide single operand signed instructions.
+// going to implement 2 word instructions potentially but 1 word is always fast
 // this works b/c of normal signed right shift behavior. last bit gets pulled down allowing for both zero and sign ext.
 /**
  * does a sign extension of the last 3 bytes of the instruction
@@ -131,15 +171,12 @@ static inline i32 op_signed_i24(Instruction ins) {
     return ((i32)(ins << 8)) >> 8;
 }
 
-// each frame (and the VM itself) would manage a max of 256 locals. (locals live in registers)
-// max of 256 globals (globals live in the global pool)
-//
-
 // call frames
 typedef struct Frame {
-    u32   ret_ip;     // where to continue after RET
-    u16   base;       // base register index in vm -> regs for this call
+    u32   jump;       // where to jump back to upon return
+    u16   base;       // base register index for this call (registers are owned by the vm)
     u16   regc;       // number of registers reserved for this frame
+    u16   reg;        // register to store return value in
     Func* callee;     // function currently being executed
 } Frame;
 
@@ -151,21 +188,21 @@ typedef struct VM {
 
     // constant pooling (pulled from using LOADC)
     const Value* consts;  // constant pool (allocated at compile time)
-    u32    constcount;       // length of pool
+    u32    constcount;    // length of pool
 
     // instruction pointer
     u32    ip;
 
     // registers (gonna carve Frames via Frame.base as this is a flat array)
-    Value* regs;
-    u32    maxregs;
+    Registers *regs;
 
     // globals table (switching to hash but for rn this is ok)
     Value* globals;
-    u32    globals_len;
+    u32    globalcount;
 
     // call stack
     Frame* frames;
+    Frame* current;
     u32    framecount;
     u32    maxframes;
 
@@ -185,17 +222,18 @@ bool vm_load_file(VM* vm, const char* path);
 
 // load a chunk from the instruction stream
 void vm_load(
-    VM* vm,                                            // pointer to vm (to load into)
-    const Instruction* code, u32 code_len,        // instruction stream (owned by VM after call)
-    const Value* consts, u32 consts_len,          // const pool (borrowed)
-    const Value* globals_init, u32 globals_len    // global pool
+    VM* vm,                                       // pointer to vm (to load into)
+    const Instruction* code, u32 instrcount,        // instruction stream (owned by VM after call)
+    const Value* consts, u32 constcount,          // const pool (borrowed)
+    const Value* globals_init, u32 globalcount    // global pool
 );
 
 // call entry function (which will be a CALLABLE)
+//  is the register index where args start (so no copies or pointer bullshit)
 bool vm_call(
     VM* vm, Func* fn,
-    Value* args, u16 argc,
-    Value* out
+    u32 base, u16 argc,
+    u16 reg
 );
 
 // run until HALT/PANIC
@@ -205,17 +243,15 @@ bool vm_run(VM* vm);
 // Func* vm_new_native(VM* vm, NativeFn fn, u16 argc);
 
 // helper for implicit falisness
-// TODO: decide if comparisons are all canonical (overhead) or done by true value
-static inline bool value_falsy(Value v) {
-    u64 val;
-    memcpy(&val, v.val, 8);
-
-    switch (v.type) {
+// TODO: decide on forcing all comparisons to bool or treating bool as 0 and everything else as true. 
+// * too tired to write new tests lmao
+static inline bool value_falsy(u8 type, u64 val) {
+    switch (type) {
         // add a unit type as it's necessary
         case NUL:   return true;       // null always false
-        case BOOL:  return !v.val[7];  // boolean do by last bit value. avoids expensive memcmp
 
-        // ints can just be normally compared to zero
+        // all these we can do by 0
+        case BOOL:
         case I64:
         case U64:
             return val == 0;

@@ -6,8 +6,8 @@ CC := gcc
 PYTHON ?= python
 PROGRAMS_DIR := tests
 
-# compiler flags
-FLAGS := -std=c99 -Wall -Wextra -O3 -g -fno-common -I. -Ivm -Iio
+# compiler flags. add -g for debug
+FLAGS := -std=c99 -Wall -Wextra -O3 -fno-common -I. -Ivm -Iio
 
 LDFLAGS :=
 
