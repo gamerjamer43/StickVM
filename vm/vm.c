@@ -529,6 +529,7 @@ bool vm_run(VM* vm) {
             case XOR:  BINOP(^);  break;
             case SHL:  BINOP(<<); break;
             case SHR:  BINOP(>>); break;
+            // case SAR: figure out what to allow
 
             case EQ:   CMPOP(==); break;
             case NEQ:  CMPOP(!=); break;
@@ -541,6 +542,7 @@ bool vm_run(VM* vm) {
             case BNOT: UNOP(~); break;
             
             // lnot has special cases. only can be used on boolean values. gonna fix jmpif and jmpifz to be the same mayb
+            // also prolly gonna figure out a way to fucking dry this cuz its just a type check
             case LNOT: {
                 u32 src = op_a(ins) + vm->current->base;
                 if (src >= MAX_REGISTERS) { 

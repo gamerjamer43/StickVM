@@ -10,7 +10,7 @@ from numpy import array, uint32
 from numpy.typing import NDArray
 from pathlib import Path
 
-# verbose flag (true if you want each step to print)
+# verbose flag
 VERBOSE: bool = False
 
 # trying to decide on a header, as a temp i'll use this
@@ -20,7 +20,7 @@ HEADER: bytes = b"STIK"
 VERSION: int = 1
 FLAGS: int = 1 if VERBOSE else 0
 
-# opcode table (keep in sync with vm/opcodes.h)
+# opcode table
 class Opcode(IntEnum):
     HALT     = 0
     PANIC    = auto()
