@@ -5,10 +5,11 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 def main():
     a = ArgumentParser(description="All currently existing opcodes are tested (uh that's a lie besides unsigned ops). If you do your own just reference the folder.")
-    a.add_argument("-p", "--path", default="./vmm", help="Path to your compiled VM binary.")
+    a.add_argument("-p", "--path", default="./vm.exe", help="Path to your compiled VM binary.")
     a.add_argument("-d", "--dir", default="tests", help="The directory containing all tests written by test.py (or your own test writer).")
     a.add_argument("-c", "--cmd", default="", help="Command to prepend (this helper was made for valgrind, so ex. 'valgrind --leak-check=full').")
     a.add_argument("-v", "--verbose", action="store_true", help="Pipes output from the vm (or your specified wrapper using --cmd) to sysout.")
@@ -58,8 +59,14 @@ def main():
     console.print(f"\n[bold red]{'='*50}[/]\n")
     for name, code, stdout, stderr in failed:
         console.print(Panel(f"[bold]{name}[/] (code: {code})", style="red", expand=False))
-        if stdout: console.print(f"[yellow]stdout:[/] {stdout}")
-        if stderr: console.print(f"[yellow]stderr:[/] {stderr}")
+
+        if stdout: 
+            console.print("[yellow]stdout:[/] ") 
+            console.print(Text.from_ansi(stdout), markup=False)
+
+        if stderr: 
+            console.print("\n[bold red]stderr:[/] ") 
+            console.print(Text.from_ansi(stderr), markup=False)
 
 if __name__ == "__main__":
     main()

@@ -5,6 +5,7 @@
 *.o
 *.dll
 *.swp
+*.out
 *.exe
 
 # emitted bytecode
