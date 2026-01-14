@@ -19,10 +19,10 @@ u32 read_u32_le(const u8 b[4]) {
 bool vm_load_file(VM* vm, const char* path) {
     if (!vm || !path) return false;
 
-    // any io errors stop here (2 = file io error)
+    // any io errors stop here (1 = file io error)
     FILE* f = fopen(path, "rb");
     if (!f) {
-        vm->panic_code = 2;
+        vm->panic_code = PANIC_FILE;
         return false;
     }
 
@@ -44,13 +44,13 @@ bool vm_load_file(VM* vm, const char* path) {
         !read_exact(f, ccount, 4) ||
         !read_exact(f, gcount, 4)
     ) {
-        err = 3;
+        err = PANIC_BAD_MAGIC;
         goto fail_file;
     }
 
     // ensure magic first (4 = bad magic)
     if (memcmp(magic, MAGIC, 4) != 0) {
-        err = 4;
+        err = PANIC_BAD_MAGIC;
         goto fail_file;
     }
 
@@ -66,27 +66,27 @@ bool vm_load_file(VM* vm, const char* path) {
     // version check (5 = unsupported version)
     // versions should be backwards compatible
     if (version > VERSION) {
-        err = 5;
+        err = PANIC_UNSUPPORTED_VERSION;
         goto fail_file;
     }
 
     // sanity checks (6 = empty. empty programs are errors for rn, will write a halt later)
     if (count == 0) {
-        err = 6; // empty
+        err = PANIC_EMPTY_PROGRAM;
         goto fail_file;
     }
 
     // prevent overflow in malloc (4b instrs = failure)
     // TODO: read line 39 nincompoop
     if (count > (UINT32_MAX / (u32)sizeof(Instruction))) {
-        err = 7; // too big
+        err = PANIC_PROGRAM_TOO_BIG;
         goto fail_file;
     }
 
     // setup instruction pointer
     code = (Instruction*)malloc((size_t)count * sizeof(Instruction));
     if (!code) {
-        err = 8; // out of memory
+        err = PANIC_OOM;
         goto fail_file;
     }
 
@@ -96,7 +96,7 @@ bool vm_load_file(VM* vm, const char* path) {
     // init registers
     vm->regs = (Registers*)calloc(1, sizeof(Registers));
     if (!vm->regs) {
-        vm->panic_code = 8; // out of memory
+        vm->panic_code = PANIC_OOM;
         return false;
     }
 
@@ -106,7 +106,7 @@ bool vm_load_file(VM* vm, const char* path) {
     if (constcount > 0) {
         consts = (Value*)malloc(constcount * sizeof(Value));
         if (!consts || !read_exact(f, (u8*)consts, constcount * sizeof(Value))) {
-            err = 10;  // const pool read failed
+            err = PANIC_CONST_READ;
             free(consts);
             goto fail_code;
         }
@@ -125,7 +125,7 @@ bool vm_load_file(VM* vm, const char* path) {
             // malloc and poll
             Func* fn = (Func*)malloc(sizeof(Func));
             if (!fn) {
-                err = 8;
+                err = PANIC_OOM;
                 free(consts);
                 goto fail_code;
             }
@@ -146,7 +146,7 @@ bool vm_load_file(VM* vm, const char* path) {
     if (globalcount > 0) {
         globals = (Value*)malloc(globalcount * sizeof(Value));
         if (!globals || !read_exact(f, (u8*)globals, globalcount * sizeof(Value))) {
-            err = 11;  // globals read failed
+            err = PANIC_GLOBAL_READ;
             free(globals);
             free(consts);
             goto fail_code;
@@ -160,7 +160,7 @@ bool vm_load_file(VM* vm, const char* path) {
 
     // ensure real count and listed count of instructions match up (9 = truncated code)
     if (got != count) {
-        err = 9;
+        err = PANIC_TRUNCATED_CODE;
         free(globals);
         free(consts);
         goto fail_code;
@@ -169,7 +169,7 @@ bool vm_load_file(VM* vm, const char* path) {
     // vm load deals with the rest
     vm_load(vm, code, count, consts, constcount, globals, globalcount);
     if (!vm->istream) {
-        err = vm->panic_code ? (int)vm->panic_code : 8;
+        err = vm->panic_code ? (int)vm->panic_code : PANIC_OOM;
         goto fail_code;
     }
 

@@ -2,7 +2,7 @@
 
 <p align="center"><img width="256" height="256" alt="Stick Logo" src="https://github.com/user-attachments/assets/27d2184b-8638-4f0f-a2ad-48379adcad30" /></p>
 <p align="center">
-    <img alt="Version" src="https://img.shields.io/badge/version-0.0.1%20indev-blue.svg" />
+    <img alt="Version" src="https://img.shields.io/badge/version-0.0.20%20indev-blue.svg" />
     <img alt="C-Edition" src="https://img.shields.io/badge/C-C99%2FC11-grey.svg" />
     <img alt="License" src="https://img.shields.io/badge/license-GPLv3-green.svg" />
 </p>
@@ -54,14 +54,17 @@ typedef struct {
 ### (roadmap contains general ideas, whereas this will contain larger more focused items.)
 
 - **Tail-call Optimization** — I cannot tell how often TCO is used, but all I know is that I rarely see it taken advantage of in the languages I use. Tail-call allows you to use the previous stack frame for your next iteration, setting the speed similar to that of a linear operation. This VM will PRIORITIZE tail-call if it can be done, and my goal for a compiler opt is, in the event an unoptimized call is found (that hits some criterion), the function content itself is modified to have an inner and outer, so that it could be converted into a proper tail-call.
-- **Mark-and-Sweep GC/Refcounting** — Not entirely sure if I want to do M&S or refcounting. Both have their perks and downsides, for one refcounting is way easier to implement, and I can stop the circular reference bs by just checking if two objects only reference each other and freeing them both (as they huddle together in the corner), but I buy myself a lot more allowed complexity and safety if I learn how to properly implement M&S
-- **Basic Compiler Optimizations** — There's probably about a hundred glaring optimizations I can make during compile time to make it much less of a hassle on startup, wind down, or on hot loops. A small excerpt:
-  1. Constant Folding. If there's an expression that can reliably evaluate to an integer constant (i.e. int x = 2 + 3) it will be "folded" (more or less solved and THEN constant pooled, i.e. int x = 6) to avoid the extra operation
-  2. Dead Code Trimming. If there's unreachable code, we're going to warn the user at the very least. Now the question is do I want to FORCE them to listen or just make it a compiler warning.
-  3. Branch Prediction. If a branch is highly more likely to happen than another (this may require a JIT) it will be made the happy path, and any sort of else statement will be a jump OUT of that loop. 
-  4. Inlining and Macros. This can easily be done as the first step of the compiler. Basically anything macroed or inlined will never hit the Bytecode vm, and will instead be embedded directly as an instruction.
-  5. String interning. This would be for memory footprint, but in the event a string is reused, it will be interned and the reference will be saved instead of needlessly reallocating.
-  6. Stack Allocate when in Scope. If a value does not escape local scope, it can be allocated on the stack. Otherwise it goes on the heap and is stored as a global (then pointed to ofc).
+- **Mark-and-Sweep (M&S) GC vs Refcounting (RC)** — Not entirely sure if I want to do M&S or refcounting. Both have their perks and downsides, for one refcounting is way easier to implement, and I can stop the circular reference bs by just checking if two objects only reference each other in a loop, and then freeing them both (from this mortal realm). I also do not know how to offer both standard and atomic reference counting. I buy myself a lot more allowed complexity and safety if I learn how to properly implement M&S.
+- **Basic Compiler Optimizations** — There's probably about a hundred glaring optimizations I can make during compile time to make it much less of a hassle on startup, wind down, or on hot loops. A small excerpt: <p style="margin-bottom:5px;"></p>
+    1. Constant Folding. If there's an expression that can reliably evaluate to an integer constant (i.e. int x = 2 + 3) it will be "folded" (more or less solved and THEN constant pooled, i.e. int x = 6) to avoid the extra operation
+    2. Dead Code Trimming. If there's unreachable code, we're going to warn the user at the very least. Now the question is do I want to FORCE them to listen or just make it a compiler warning.
+    3. Branch Prediction. If a branch is highly more likely to happen than another (this may require a JIT) it will be made the happy path, and any sort of else statement will be a jump OUT of that loop. 
+    4. Inlining and Macros. This can easily be done as the first step of the compiler. Basically anything macroed or inlined will never hit the Bytecode vm, and will instead be embedded directly as an instruction.
+    5. String interning. This would be for memory footprint, but in the event a string is reused, it will be interned and the reference will be saved instead of needlessly reallocating.
+    6. Stack Allocate when in Scope. If a value does not escape local scope, it can be often be allocated on the stack (this does not apply for dynamically sized elements). Otherwise it goes on the heap and is stored as a global (then pointed to ofc).
+    7. Inline CACHING. the most recent function call is cached so we don't have to pull it again. good for hot loops.
+- **Lazy Evaluation** — I already have this planned relatively soon. The thought would be to create a u8 type CELL (which stores a sort of frozen computation), which will then be evaluated (prolly the basic cell will allow for multiple methods of evaluation based on usage, but i only have once locks in mind like Rust for right now.) or CLOSURE (which Rust also has but works for both cells and closures).
+- **Stack Tracing & Disassembler** — This is gonna be hard at the bytecode level, unless I create a DISASSEMBLER. I may just deal with that at the compiler level, and make any errors throw a generic error that kinda tells you where your error is coming from. But this is deffo a lot later on the list, potentially even after the JIT.
 - **Again... "more stuff"** — I still have plenty more to research, so this will be incrementally optimized. Once the core language is done and school picks up **this will still be in maintenance,** although I plan to only sink about 3 hours a week into dedicated tasks.
 
 
@@ -82,8 +85,18 @@ cd StickVM
 make
 ```
 
-3) This builds test files, so run the runner to check em out?
-
+3) test.py builds test files, and places them in a test folder for the runner to iterate through
+```bash
+# just run and done. 47 test files currently
+python test.py
+```
+```
+runner.py flags:
+1. -v (verbose): enables additional logging
+2. -p (path arg): the path to your binary (after running `make`)
+3. -f (verbose mode): enables more logging
+4. -f (verbose mode): enables more logging
+```
 ```bash
 python runner.py
 ```

@@ -6,6 +6,29 @@
 #include "vm.h"
 #include "io/reader.h"
 
+// listing of all error messages. im making it work then im modularizing. alr prematurely optimized lol
+const char *const MESSAGES[] = {
+    "",
+    "File IO error",
+    "Register overflow",
+    "No halt",
+    "Bad magic",
+    "Unsupported version",
+    "Empty program",
+    "Program too large",
+    "Out of memory",
+    "Truncated code",
+    "Const pool read failed",
+    "Globals read failed",
+    "Register limit exceeded",
+    "Stack overflow",
+    "Stack underflow",
+    "Invalid callable",
+    "Call failed",
+    "Type mismatch",
+    "Invalid opcode",
+};
+
 /**
  * init using struct zeroing
  * @param vm a pointer to an empty vm struct
@@ -63,7 +86,7 @@ void vm_free(VM* vm) {
     }
 
     vm->ip         = 0;
-    vm->panic_code = 0;
+    vm->panic_code = NO_ERROR;
 }
 
 
@@ -98,13 +121,13 @@ void vm_load(
     vm->consts = NULL;
     vm->constcount = 0;
     vm->ip = 0;
-    vm->panic_code = 0;
+    vm->panic_code = NO_ERROR;
     vm->framecount = 0;
 
     // take ownership of the instructions (no copy, 8 = out of memory)
     if (instrcount > 0) {
         if (!code) {
-            vm->panic_code = 8;
+            vm->panic_code = PANIC_OOM;
             return;
         }
 
@@ -120,7 +143,7 @@ void vm_load(
     if (globalcount == 0) return;
     vm->globals = (Value*)calloc(globalcount, sizeof(Value));
     if (!vm->globals) {
-        vm->panic_code = 8;
+        vm->panic_code = PANIC_OOM;
         return;
     }
 
@@ -138,7 +161,7 @@ void vm_load(
  */
 static inline bool ensure_regs(VM* vm, u32 need) {
     if (need > MAX_REGISTERS) {
-        if (vm) vm->panic_code = 12;
+        if (vm) vm->panic_code = PANIC_REG_LIMIT;
         return false;
     }
     return true;
@@ -157,14 +180,14 @@ static inline bool push_frame(VM* vm, Frame *frame) {
 
         // already at max capacity
         if (vm->framecount >= newmax) {
-            vm->panic_code = 13; // stack overflow
+            vm->panic_code = PANIC_STACK_OVERFLOW;
             return false;
         }
 
         // alloc, poll, and set counters properly
         Frame* newframes = (Frame*)realloc(vm->frames, newmax * sizeof(Frame));
         if (!newframes) {
-            vm->panic_code = 8;
+            vm->panic_code = PANIC_OOM;
             return false;
         }
         vm->frames = newframes;
@@ -183,7 +206,7 @@ static inline bool push_frame(VM* vm, Frame *frame) {
  */
 static inline bool pop_frame(VM* vm, Frame *out) {
     if (!vm || vm->framecount == 0) {
-        if (vm) vm->panic_code = 14; // stack underflow
+        if (vm) vm->panic_code = PANIC_STACK_UNDERFLOW;
         return false;
     }
     vm->framecount--;
@@ -201,8 +224,9 @@ static inline bool pop_frame(VM* vm, Frame *out) {
 static inline bool jump_rel(VM* vm, i32 off) {
     i64 next = (i64)vm->ip + (i64)off;
 
+    // (2 = register overflow)
     if (next < 0 || next >= (i64)vm->icount) {
-        vm->panic_code = 1;
+        vm->panic_code = PANIC_REG_OVERFLOW;
         return false;
     }
 
@@ -274,6 +298,25 @@ bool vm_call(VM *vm, Func *fn, u32 base, u16 argc, u16 reg) {
 }
 
 /**
+ * close and free safely on a panic. panics can contain 0 and that is just gonna be a runtime error
+ * may just make runtime exception handling sep but i feel like this simplifies handling
+ * @param vm pointer to the current vm
+ */
+u32 vm_panic(u32 code) {
+    // quit early
+    if (!(code < PANIC_CODE_COUNT)) return code;
+
+    // ansi colors legit arent used anywhere else
+    const char* red = "\x1b[31m";
+    const char* reset = "\x1b[0m";
+    printf(
+        "%s[ERROR] Code %d: %s%s\n", 
+        red, code, MESSAGES[code], reset
+    );
+    return code;
+}
+
+/**
  * main vm run loop. while ip < icount execute instructions (may move this)
  * potentially look into a dispatch table, as hash lookup would prob speed up some already tight hot loops
  * return false if we do not properly hit a halt, or if we hit panic
@@ -284,7 +327,7 @@ bool vm_run(VM* vm) {
     if (!vm || !vm->istream || !vm->regs) return false;
 
     // default 0, panic = 0 means no errors
-    vm->panic_code = 0;
+    vm->panic_code = NO_ERROR;
 
     // ensure a base of 16 registers for the entry frame
     if (!ensure_regs(vm, BASE_REGISTERS)) return false;
@@ -329,7 +372,7 @@ bool vm_run(VM* vm) {
 
                 // make sure register is valid before jumping
                 if (src >= MAX_REGISTERS) {
-                    vm->panic_code = 1;
+                    vm->panic_code = PANIC_REG_OVERFLOW;
                     return false;
                 }
 
@@ -348,7 +391,7 @@ bool vm_run(VM* vm) {
 
                 // make sure register is valid before jumping
                 if (src >= MAX_REGISTERS) {
-                    vm->panic_code = 1;
+                    vm->panic_code = PANIC_REG_OVERFLOW;
                     return false;
                 }
 
@@ -403,7 +446,7 @@ bool vm_run(VM* vm) {
 
                 // if no pool or out of bounds panic
                 if (!vm->consts || index >= vm->constcount) {
-                    vm->panic_code = 1;
+                    vm->panic_code = PANIC_REG_OVERFLOW;
                     return false;
                 }
 
@@ -422,7 +465,7 @@ bool vm_run(VM* vm) {
 
                 // if no pool or out of bounds panic (really needa fix this name pollution next)
                 if (!vm->globals || index >= vm->globalcount) {
-                    vm->panic_code = 1;
+                    vm->panic_code = PANIC_REG_OVERFLOW;
                     return false;
                 }
 
@@ -440,7 +483,7 @@ bool vm_run(VM* vm) {
                 u32 index = op_b(ins);
 
                 if (!vm->globals || index >= vm->globalcount) {
-                    vm->panic_code = 1;
+                    vm->panic_code = PANIC_REG_OVERFLOW;
                     return false;
                 }
 
@@ -461,7 +504,7 @@ bool vm_run(VM* vm) {
                 // bounds check
                 u32 abs = reg + vm->current->base;
                 if (abs >= MAX_REGISTERS) {
-                    vm->panic_code = 1;
+                    vm->panic_code = PANIC_REG_OVERFLOW;
                     return false;
                 }
 
@@ -469,7 +512,7 @@ bool vm_run(VM* vm) {
                 u8  type    = vm->regs->types[abs];
                 u64 payload = vm->regs->payloads[abs];
                 if (type != CALLABLE) {
-                    vm->panic_code = 15;
+                    vm->panic_code = PANIC_INVALID_CALLABLE;
                     return false;
                 }
 
@@ -477,13 +520,13 @@ bool vm_run(VM* vm) {
                 Func* fn;
                 memcpy(&fn, &payload, sizeof(Func*));
                 if (!fn) {
-                    vm->panic_code = 15;
+                    vm->panic_code = PANIC_INVALID_CALLABLE;
                     return false;
                 }
 
                 // pull args and call
                 if (!vm_call(vm, fn, abs + 1, argc, dest)) {
-                    if (vm->panic_code == 0) vm->panic_code = 16;
+                    if (vm->panic_code == 0) vm->panic_code = PANIC_CALL_FAILED;
                     return false;
                 }
 
@@ -518,7 +561,8 @@ bool vm_run(VM* vm) {
                 break;
             }
 
-            // (i think) all operators muahahaha
+            // all operators muahahaha (i think) 
+            // binary ops, arithmetic and bitwise
             case ADD:  BINOP(+);  break;
             case SUB:  BINOP(-);  break;
             case MUL:  BINOP(*);  break;
@@ -531,6 +575,15 @@ bool vm_run(VM* vm) {
             case SHR:  BINOP(>>); break;
             // case SAR: figure out what to allow
 
+            // unsigned ops
+            case DIVU: UBINOP(/);  break;
+            case MODU: UBINOP(%);  break;
+            case GTU:  UBINOP(>);  break;
+            case GEU:  UBINOP(>=); break;
+            case LTU:  UBINOP(<);  break;
+            case LEU:  UBINOP(<=); break;
+            
+            // boolean comparison ops
             case EQ:   CMPOP(==); break;
             case NEQ:  CMPOP(!=); break;
             case GT:   CMPOP(>);  break;
@@ -538,21 +591,22 @@ bool vm_run(VM* vm) {
             case LT:   CMPOP(<);  break;
             case LE:   CMPOP(<=); break;
 
+            // unary ops
             case NEG:  UNOP(-); break;
             case BNOT: UNOP(~); break;
             
-            // lnot has special cases. only can be used on boolean values. gonna fix jmpif and jmpifz to be the same mayb
+            // logical not has special cases. ONLY can be used on boolean values. gonna fix jmpif and jmpifz to be the same mayb
             // also prolly gonna figure out a way to fucking dry this cuz its just a type check
             case LNOT: {
                 u32 src = op_a(ins) + vm->current->base;
                 if (src >= MAX_REGISTERS) { 
-                    vm->panic_code = 1; 
+                    vm->panic_code = PANIC_REG_OVERFLOW; 
                     return false; 
                 }
 
                 if (!ensure_regs(vm, src + 1)) return false;
                 if (vm->regs->types[src] != BOOL) { 
-                    vm->panic_code = 17; 
+                    vm->panic_code = PANIC_TYPE_MISMATCH; 
                     return false; 
                 }
                 
@@ -560,16 +614,26 @@ bool vm_run(VM* vm) {
                 break;
             }
 
+            // LEFT TO IMPLEMENT SO FAR:
+            // SAR - arithmetic shift right
+            // TAILCALL - reuse the same stack frame for a recursive call
+            // NEWARR, NEWTABLE, NEWOBJ - heap allocated objects
+            // GETELEM, SETELEM - hash table operations
+            // ARRGET, ARRSET, ARRLEN - arrray operations
+            // CONCAT, STRLEN - string operations
+            // I2D, I2F, D2I, F2I - signed conversions (ADD I2U, U2I)
+            // U2D, U2F, D2U, F2U - unsigned conversions (ADD THESE OPCODES)
+
             // nothing matched (9 = invalid opcode)
             default: {
-                vm->panic_code = 9;
+                vm->panic_code = PANIC_INVALID_OPCODE;
                 return false;   
             }
         }
     }
 
-    // no halt found
-    vm->panic_code = 1;
+    // (3 = no halt found)
+    vm->panic_code = PANIC_NO_HALT;
     return false;
 }
 
@@ -609,6 +673,6 @@ int main(int argc, char const *argv[]) {
 
     // free everything safely when done, log any errors
     vm_free(&vm);
-    if (!ok && code != 0) printf("error, code: %u\n", code);
+    if (!ok && code != 0) vm_panic(code);
     return (int)code;
 }

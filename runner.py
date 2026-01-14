@@ -7,11 +7,11 @@ from rich.panel import Panel
 from rich.table import Table
 
 def main():
-    a = ArgumentParser(description="Official set of StickVM opcode tests provided. If you do your own just reference the folder.")
-    a.add_argument("-p", "--path", default="./vmm", help="Path to VM executable")
-    a.add_argument("-d", "--dir", default="tests", help="Directory containing .stk files")
-    a.add_argument("-c", "--cmd", default="", help="Command to prepend (e.g., 'valgrind --leak-check=full')")
-    a.add_argument("-v", "--verbose", action="store_true", help="Show output from each test in real-time")
+    a = ArgumentParser(description="All currently existing opcodes are tested (uh that's a lie besides unsigned ops). If you do your own just reference the folder.")
+    a.add_argument("-p", "--path", default="./vmm", help="Path to your compiled VM binary.")
+    a.add_argument("-d", "--dir", default="tests", help="The directory containing all tests written by test.py (or your own test writer).")
+    a.add_argument("-c", "--cmd", default="", help="Command to prepend (this helper was made for valgrind, so ex. 'valgrind --leak-check=full').")
+    a.add_argument("-v", "--verbose", action="store_true", help="Pipes output from the vm (or your specified wrapper using --cmd) to sysout.")
 
     # setup
     args = a.parse_args()
@@ -28,7 +28,7 @@ def main():
         cmd = args.cmd.split() if args.cmd else []
         result = run(cmd + [args.path, str(test)], capture_output=not args.verbose, text=True)
         
-        # valgrind returns 0, 1 instead
+        # valgrind returns 0 or 1 instead
         if valgrind: code = result.returncode in (0, 1)
         else: code = result.returncode == 0
         
@@ -43,18 +43,16 @@ def main():
             results.append((test.name, "[red]FAIL[/]", str(result.returncode)))
 
     # build nice table
-    table = Table(title="Test Results")
-    table.add_column("Test", style="cyan")
-    table.add_column("Status", justify="center")
-    table.add_column("Exit Code", justify="center")
+    table = Table(title="Results:")
+    table.add_column("Name", style="cyan")
+    table.add_column("Pass/Fail", justify="center")
+    table.add_column("Code", justify="center")
     for name, status, code in results: table.add_row(name, status, code)
-    table.add_row(f"[bold]Total: {len(tests)}[/]", f"[green]PASS: {len(passed)}[/]", f"[red]FAIL: {len(failed)}[/]")
+    table.add_row(f"[bold]Total: {len(tests)}[/]", f"[green]Passed: {len(passed)}[/]", f"[red]Failed: {len(failed)}[/]")
 
     # print and (maybe) congratulate
     console.print(table)
-    if not failed:
-        console.print("[bold green]All tests passed![/]")
-        return
+    if not failed: return console.print("[bold green]All tests passed![/]")
     
     # log any fails and their output
     console.print(f"\n[bold red]{'='*50}[/]\n")

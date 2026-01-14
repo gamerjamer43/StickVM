@@ -85,20 +85,23 @@
 // my headers (also pulls in stdint and stdbool)
 #include "typing.h"
 #include "opcodes.h"
+#include "errors.h"
 
 // read from the header
 #define MAGIC "STIK"
 #define VERSION 1
 // #define FLAG_VERBOSE 0x0001 (gonna add this later)
 
-// general binop helper. can do both boolean and general binary operations
+// general binop helper. can do both boolean and general binary operations of any numeric type
+// this will be getting changed tho b/c values atm are all casted to fucking i64 or u64 for unsigned.
+// TODO: add float operations
 #define BINOP_GENERIC(result_type_expr, cast_type, result_expr) do { \
     u32 dest = op_a(ins); \
     u32 lhs = op_b(ins) + vm->current->base; \
     u32 rhs = op_c(ins) + vm->current->base; \
     \
     if (lhs >= MAX_REGISTERS || rhs >= MAX_REGISTERS) { \
-        vm->panic_code = 1; return false; \
+        vm->panic_code = PANIC_REG_OVERFLOW; return false; \
     } \
     \
     u32 adjusted = dest + vm->current->base; \
@@ -106,7 +109,7 @@
     \
     u8 ltype = vm->regs->types[lhs]; \
     u8 rtype = vm->regs->types[rhs]; \
-    if (ltype != rtype) { vm->panic_code = 17; return false; } \
+    if (ltype != rtype) { vm->panic_code = PANIC_TYPE_MISMATCH; return false; } \
     \
     cast_type lval = (cast_type)vm->regs->payloads[lhs]; \
     cast_type rval = (cast_type)vm->regs->payloads[rhs]; \
@@ -120,7 +123,7 @@
     u32 src = op_a(ins) + vm->current->base; \
     \
     if (src >= MAX_REGISTERS) { \
-        vm->panic_code = 1; return false; \
+        vm->panic_code = PANIC_REG_OVERFLOW; return false; \
     } \
     \
     if (!ensure_regs(vm, src + 1)) return false; \
@@ -133,9 +136,10 @@
 } while(0)
 
 // bin op is just normal, cmp op returns a bool, and unary is just whatever type the operand is
-#define BINOP(OP) BINOP_GENERIC(ltype, i64, lval OP rval)
-#define CMPOP(OP) BINOP_GENERIC(BOOL, i64, (lval OP rval) ? 1 : 0)
-#define UNOP(OP)  UNOP_GENERIC(stype, i64, OP val)
+#define BINOP(OP)  BINOP_GENERIC(ltype, i64, lval OP rval)
+#define UBINOP(OP) BINOP_GENERIC(ltype, u64, lval OP rval)
+#define CMPOP(OP)  BINOP_GENERIC(BOOL, i64, (lval OP rval) ? 1 : 0)
+#define UNOP(OP)   UNOP_GENERIC(stype, i64, OP val)
 
 // pack instructions (shift everything to its proper location)
 static inline Instruction pack(Field op, Field a, Field b, Field c) {
