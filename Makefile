@@ -3,7 +3,7 @@
 .PHONY: all clean run programs
 
 CC := gcc
-PYTHON ?= python
+PYTHON ?= python3
 PROGRAMS_DIR := tests
 
 # compiler flags. add -g for debug
@@ -27,7 +27,7 @@ clean:
 	-@if exist $(PROGRAMS_DIR) rmdir /S /Q $(PROGRAMS_DIR)
 
 else
-TARGET := vm
+TARGET := vmm
 RUN    := ./$(TARGET)
 
 clean:
