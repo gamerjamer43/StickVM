@@ -34,6 +34,7 @@
 - **Constant & global pools** — Constants are immutable and baked in at compile time. Globals are mutable and persist across the entire runtime. No need to construct values at runtime, they just get loaded in.
 - **Frame Based Model** — In the way the actual stack works, space is reserved for the entry frame (aka main) on run. From there, frames are pushed and popped until we reach the bottom layers end, in which case it will expect a halt (if none is found it will panic with Code 1, though I could make it automatically insert). Registers are local to the VM with the frame reserving a base value to start placing registers at on creation.
 - **Values fixed 9 byte width, no packing** — I toyed around with this in 5 different ways and found a solution I really like. Constant/Global values are stored as u8 byte arrays pretty much, and all the others live in a properly aligned registers "file". Cuz I'm crazy, I will likely still look into alternative options, but this leaves us at 9 bytes fixed no matter what, "wasting" only one for the type. If I were to NAN box I would not be able to do typed canonical widths, so this allows extension to basically just be a noop. The layout is:
+- **C99 Base** — I'm potentially looking into switching to gnu99, but plain ISO C99 is working just fine, and I don't necessarily need typeof because types are stored seperately and punned.
 ```c
 // constants, globals, and values that otherwise need to be serialized. if we do not need to memcpy more than once in a hot loop it only costs abt 2 cycles + disk/ram overhead
 typedef struct {
@@ -41,31 +42,26 @@ typedef struct {
     u8 payload[8];
 } Value;
 
+
+// any value that lives in a register will be in a union so type punning can happen based on the tag
+typedef union {
+    i64    i;
+    u64    u;
+    double d;
+    float  f;
+    bool   b;
+    Func*  fn;
+    void*  obj;
+} TypedValue;
+
 // any value in a register actively being used during runtime lives in here. u64 before u8 to keep 8 byte vals aligned properly before dropping to 1 byte
 // though idk if this is an issue if we're just allocating all 65536 registers at the start
 typedef struct {
-    u64 payloads[MAX_REGISTERS];
-    u8  types[MAX_REGISTERS];
+    TypedValue payloads[MAX_REGISTERS];
+    u8 types[MAX_REGISTERS];
 } Registers;
 ```
 - **Other Stuff** — Quite honestly, I don't exactly know what to show off here. Will be updated as I write more.
-
-## Planned Features 
-### (roadmap contains general ideas, whereas this will contain larger more focused items.)
-
-- **Tail-call Optimization** — I cannot tell how often TCO is used, but all I know is that I rarely see it taken advantage of in the languages I use. Tail-call allows you to use the previous stack frame for your next iteration, setting the speed similar to that of a linear operation. This VM will PRIORITIZE tail-call if it can be done, and my goal for a compiler opt is, in the event an unoptimized call is found (that hits some criterion), the function content itself is modified to have an inner and outer, so that it could be converted into a proper tail-call.
-- **Mark-and-Sweep (M&S) GC vs Refcounting (RC)** — Not entirely sure if I want to do M&S or refcounting. Both have their perks and downsides, for one refcounting is way easier to implement, and I can stop the circular reference bs by just checking if two objects only reference each other in a loop, and then freeing them both (from this mortal realm). I also do not know how to offer both standard and atomic reference counting. I buy myself a lot more allowed complexity and safety if I learn how to properly implement M&S.
-- **Basic Compiler Optimizations** — There's probably about a hundred glaring optimizations I can make during compile time to make it much less of a hassle on startup, wind down, or on hot loops. A small excerpt: <p style="margin-bottom:5px;"></p>
-    1. Constant Folding. If there's an expression that can reliably evaluate to an integer constant (i.e. int x = 2 + 3) it will be "folded" (more or less solved and THEN constant pooled, i.e. int x = 6) to avoid the extra operation
-    2. Dead Code Trimming. If there's unreachable code, we're going to warn the user at the very least. Now the question is do I want to FORCE them to listen or just make it a compiler warning.
-    3. Branch Prediction. If a branch is highly more likely to happen than another (this may require a JIT) it will be made the happy path, and any sort of else statement will be a jump OUT of that loop. 
-    4. Inlining and Macros. This can easily be done as the first step of the compiler. Basically anything macroed or inlined will never hit the Bytecode vm, and will instead be embedded directly as an instruction.
-    5. String interning. This would be for memory footprint, but in the event a string is reused, it will be interned and the reference will be saved instead of needlessly reallocating.
-    6. Stack Allocate when in Scope. If a value does not escape local scope, it can be often be allocated on the stack (this does not apply for dynamically sized elements). Otherwise it goes on the heap and is stored as a global (then pointed to ofc).
-    7. Inline CACHING. the most recent function call is cached so we don't have to pull it again. good for hot loops.
-- **Lazy Evaluation** — I already have this planned relatively soon. The thought would be to create a u8 type CELL (which stores a sort of frozen computation), which will then be evaluated (prolly the basic cell will allow for multiple methods of evaluation based on usage, but i only have once locks in mind like Rust for right now.) or CLOSURE (which Rust also has but works for both cells and closures).
-- **Stack Tracing & Disassembler** — This is gonna be hard at the bytecode level, unless I create a DISASSEMBLER. I may just deal with that at the compiler level, and make any errors throw a generic error that kinda tells you where your error is coming from. But this is deffo a lot later on the list, potentially even after the JIT.
-- **Again... "more stuff"** — I still have plenty more to research, so this will be incrementally optimized. Once the core language is done and school picks up **this will still be in maintenance,** although I plan to only sink about 3 hours a week into dedicated tasks.
 
 
 ## Quickstart
@@ -106,7 +102,7 @@ python runner.py
 .\vm <filepath> <args> # .\vm.exe if windows
 ```
 
-## A look under the hood
+## Under the Hood
 
 A lot of moving parts come together to make this so fast. A combination of multiple different types of data storage specifically made for their types of access, proper handling of ownership vs copying, and doing a lot of reading lead me to create a design that allows for some things to be mutably global, some things to be immutably global, and eventually by default I would like to make locals immutable (allowing mutability, but behind a mut keyword).
 
@@ -159,7 +155,7 @@ A lot of moving parts come together to make this so fast. A combination of multi
 | `MOD` | Signed modulo |
 | `NEG` | Unary negation (in-place) |
 
-### Comparisons (result is BOOL)
+### Comparisons (result always BOOL)
 | Opcode | Description |
 |--------|-------------|
 | `EQ` | Equal |
@@ -184,42 +180,117 @@ A lot of moving parts come together to make this so fast. A combination of multi
 
 ## File Format
 `.stk` binary format (little-endian):
-The header is 20 bytes containing pretty much all the info anyone needs to know
+The header is 20 bytes containing pretty much all the info the runtime will need to know to properly construct your program.
 ```
 ┌────────────────────────────────────┐
 │ Header (20 bytes)                  │
 ├────────────────────────────────────┤
-│ 4B  magic     "STIK"               │
-│ 2B  version                        │
-│ 2B  flags                          │
-│ 4B  instruction count              │
-│ 4B  constant count                 │
-│ 4B  global count                   │
+│ 4 byte magic "STIK" (may change)   │
+│ 2 byte version                     │
+│ 2 byte flags (16 max for rn)       │
+│ 4 byte instruction count           │
+│ 4 byte constant count              │
+│ 4 byte global count                │
+└────────────────────────────────────┘
+```
+The body contains a list of 32 bit instructions (count matches the listed instruction count), which are placed above the const and global pools. Simple 'as.
+```
+┌────────────────────────────────────┐
+│ Instructions (32 bit)              │
 ├────────────────────────────────────┤
-│ Instructions (4 bytes each)        │
+│ Consts (1 byte type + 8 byte val)  │
 ├────────────────────────────────────┤
-│ Constants (9 bytes ea: type + val) │
-├────────────────────────────────────┤
-│ Globals (9 bytes ea: type + val)   │
+│ Globals (1 byte type + 8 byte val) │
 └────────────────────────────────────┘
 ```
 
-## Development logs
-### These are only minor dev logs, (see log.md, I'm a bit behind but I'm focused more on the coding than the documentation.)
-
-#### Recent Changes:
-- Preallocated 65536 registers for frame handling (will potentially expand further but that would require 2 word instructions.)
-- Added the actual stack, including push/pop of frames, CALL and RET, and the entry frame that gets pushed on main (as we should lol.)
-- Added operation macros and ALL operations (BINOP, CMPOP, UNOP are all basically the same, so once one was done all the others were too.)
-- Fixed LNOT to **only** work on BOOL types
-- Fixed both Value struct padding and `memcpy` abuse.
-- All 43 (with the addition of 35 new ones) passing.
-
-#### Known Issues:
-- No frontend compiler yet legit just using packed structs.
-- Will have to brute
-
 ## Roadmap
+
+### Planned Syntax:
+Imports are easy, potentially will make a preprocessor, which will then make it a directive using `#`
+```
+// libs will already be compiled (i hope)
+#import lib
+#import lib.sub
+#import std.io
+
+// files have to get included to be compiled along with the program
+#import "file.file"
+```
+Declarations are too, just:
+```
+// deciding on := or just plain = rn but i like assignment vs reassignment
+// <modifiers> <type> <name> := <val>
+i32 number = 1;
+const i32 zero = 0;
+```
+The only things that can be defined outside of a function scope are constant (fixed mem location fixed value), and globals (fixed mem location aka the global pool)
+```
+// anything outside of main scope must be constant or global
+// value is constant at runtime. immutable
+const i32 fuck = 42
+
+// you can define globals outside because their memory location is fixed
+// this means a lazy that is evaluated at run time is ok because we know its size at compile time
+// thanks rust
+global i32 shit = 42
+```
+You can write function prototypes similar to C, and they can be hidden away with your docstrings attached
+```
+// will allow for prototyping in headers/interfaces
+//! this is a docstring.
+//! title: name
+//! desc: returns a greeting with your name
+//! params: name: str = your name
+func name (str name) -> str;
+```
+Functions are simple. Define one with the func keyword and attach params and type.
+```
+func meaning_of_life () -> i64 {
+    return 42;
+}
+
+func name (str name) -> str {
+    // potentially making strings use String.new() for heap alloc
+    str string = "Hello, " .. name!
+    return string;
+}
+```
+Main is very similar, but will always return an i32 containing 0 if successful or a panic if not (it is implicit so dw).
+I may change this to work so that it returns a unit type, but uncertain of what a unit type necessarily means in my language.
+```
+// deciding on i32 or unit type for main return
+func main (i32 argc, str argv[]) -> i32 {
+    // this is alr pretty go flavored so i might just keep =
+    str yoName := readln("> ")
+    yoName = name(yoName)
+
+    // i may go parenthesis optional and do
+    // writeln name yoName
+    writeln(yoName + “ dat yo name”)
+    writefn(“%s”, yoName)
+}
+```
+I may also go parenthesis optional, allowing for:
+```
+writeln yoName + “ dat yo name”
+writefn “%s”, yoName
+```
+
+### Planned Features (no course for implementation yet)
+- **Tail-call Optimization** — I cannot tell how often TCO is used, but all I know is that I rarely see it taken advantage of in the languages I use. Tail-call allows you to use the previous stack frame for your next iteration, setting the speed similar to that of a linear operation. This VM will PRIORITIZE tail-call if it can be done, and my goal for a compiler opt is, in the event an unoptimized call is found (that hits some criterion), the function content itself is modified to have an inner and outer, so that it could be converted into a proper tail-call.
+- **Mark-and-Sweep (M&S) GC vs Refcounting (RC)** — Not entirely sure if I want to do M&S or refcounting. Both have their perks and downsides, for one refcounting is way easier to implement, and I can stop the circular reference bs by just checking if two objects only reference each other in a loop, and then freeing them both (from this mortal realm). I also do not know how to offer both standard and atomic reference counting. I buy myself a lot more allowed complexity and safety if I learn how to properly implement M&S.
+- **Basic Compiler Optimizations** — There's probably about a hundred glaring optimizations I can make during compile time to make it much less of a hassle on startup, wind down, or on hot loops. A small excerpt: <p style="margin-bottom:5px;"></p>
+    1. Constant Folding. If there's an expression that can reliably evaluate to an integer constant (i.e. int x = 2 + 3) it will be "folded" (more or less solved and THEN constant pooled, i.e. int x = 6) to avoid the extra operation
+    2. Dead Code Trimming. If there's unreachable code, we're going to warn the user at the very least. Now the question is do I want to FORCE them to listen or just make it a compiler warning.
+    3. Branch Prediction. If a branch is highly more likely to happen than another (this may require a JIT) it will be made the happy path, and any sort of else statement will be a jump OUT of that loop. 
+    4. Inlining and Macros. This can easily be done as the first step of the compiler. Basically anything macroed or inlined will never hit the Bytecode vm, and will instead be embedded directly as an instruction.
+    5. String interning. This would be for memory footprint, but in the event a string is reused, it will be interned and the reference will be saved instead of needlessly reallocating.
+    6. Stack Allocate when in Scope. If a value does not escape local scope, it can be often be allocated on the stack (this does not apply for dynamically sized elements). Otherwise it goes on the heap and is stored as a global (then pointed to ofc).
+    7. Inline CACHING. the most recent function call is cached so we don't have to pull it again. good for hot loops.
+- **Lazy Evaluation** — I already have this planned relatively soon. The thought would be to create a u8 type CELL (which stores a sort of frozen computation), which will then be evaluated (prolly the basic cell will allow for multiple methods of evaluation based on usage, but i only have once locks in mind like Rust for right now.) or CLOSURE (which Rust also has but works for both cells and closures).
+- **Stack Tracing & Disassembler** — This is gonna be hard at the bytecode level, unless I create a DISASSEMBLER. I may just deal with that at the compiler level, and make any errors throw a generic error that kinda tells you where your error is coming from. But this is deffo a lot later on the list, potentially even after the JIT.
+- **Again... "more stuff"** — I still have plenty more to research, so this will be incrementally optimized. Once the core language is done and school picks up **this will still be in maintenance,** although I plan to only sink about 3 hours a week into dedicated tasks.
 
 ### ✅ Done
 - [x] VM core (init, load, run, free)
@@ -233,7 +304,7 @@ The header is 20 bytes containing pretty much all the info anyone needs to know
 - [x] Bitwise (AND, OR, XOR, BNOT, LNOT, SHL, SHR)
 - [x] CALL and RET implementation
 - [x] Python test generator + runner (just a QOL thing, don't wanna manually run >5 tests)
-- [X] Function calls (instead they're loaded at preruntime)
+- [x] Function calls (instead they're loaded at preruntime)
 - [x] CALL/RET tests (comes with the above)
 
 ### 🔨 Immediate
