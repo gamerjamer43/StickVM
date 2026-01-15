@@ -87,6 +87,9 @@
 #include "opcodes.h"
 #include "errors.h"
 
+// debug flag (WILL BE REMOVED)
+#define DEBUG 0
+
 // read from the header
 #define MAGIC "STIK"
 #define VERSION 1

@@ -343,7 +343,7 @@ bool vm_run(VM* vm) {
         // pull current instruction and increment ip
         Instruction ins = vm->istream[vm->ip++];
 
-        printf("code: %d\n", opcode(ins));
+        if (DEBUG) printf("code: %d\n", opcode(ins));
         switch ((Opcode)opcode(ins)) {
             // normal halt returns with no issues
             case HALT:

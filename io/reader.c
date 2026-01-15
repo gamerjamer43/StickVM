@@ -94,7 +94,12 @@ bool vm_load_file(VM* vm, const char* path) {
     }
 
     // read instructions into the buffer (using little endian by default) and safely null file when done
+    // ensure real count and listed count of instructions match up (9 = truncated code)
     size_t got = fread(code, sizeof(Instruction), count, f);
+    if (got != count) {
+        err = PANIC_TRUNCATED_CODE;
+        goto fail_code;
+    }
 
     // init registers
     vm->regs = (Registers*)calloc(1, sizeof(Registers));
@@ -164,12 +169,6 @@ bool vm_load_file(VM* vm, const char* path) {
     // close safely and null out
     fclose(f);
     f = NULL;
-
-    // ensure real count and listed count of instructions match up (9 = truncated code)
-    if (got != count) {
-        err = PANIC_TRUNCATED_CODE;
-        goto fail_code;
-    }
 
     // vm load deals with the rest
     vm_load(vm, code, count, consts, constcount, globals, globalcount);
