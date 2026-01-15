@@ -42,28 +42,6 @@ typedef enum {
     TAILCALL,  // reuse current stack frame for another call
     RET,       // return to caller
 
-    // arithmetic operators
-    ADD,       // add src1 and src2 and store in the src0
-    SUB,       // do src1 minus src2 and store in the src0
-    MUL,       // multiply src1 and src2 and store in src0
-    DIV,       // do src1 divided by src2 and store in src0 (signed ints)
-    DIVU,      // do src1 divided by src2 and store in src0 (unsigned ints)
-    MOD,       // do src1 mod src2 and store in src0 (signed ints)
-    MODU,      // do src1 mod src2 and store in src0 (unsigned ints)
-    NEG,       // unary negation. multiply the value in src0 by -1
-
-    // logical operators
-    EQ,        // src0 = (src1 == src2)
-    NEQ,       // src0 = (src1 != src2)
-    GT,        // src0 = (src1 >  src2) (signed)
-    GTU,       // src0 = (src1 >  src2) (unsigned)
-    GE,        // src0 = (src1 >= src2) (signed)
-    GEU,       // src0 = (src1 >= src2) (unsigned)
-    LT,        // src0 = (src1 <  src2) (signed)
-    LTU,       // src0 = (src1 <  src2) (unsigned)
-    LE,        // src0 = (src1 <= src2) (signed)
-    LEU,       // src0 = (src1 <= src2) (unsigned)
-
     // bitwise (and also logical operators as bools make false 0)
     AND,       // bitwise and src1 by src2 and store in src0
     OR,        // bitwise or src1 by src2 and store in src0
@@ -101,6 +79,41 @@ typedef enum {
     F2I,       // float to int. dst = (i64)src1
     I2U,       // signed to unsigned 64 bit. dst = (u64)src1
     U2I,       // unsigned to signed 64 bit. dst = (i64)src1
+
+    // arithmetic operators
+    ADD,       // add src1 and src2 and store in the src0
+    SUB,       // do src1 minus src2 and store in the src0
+    MUL,       // multiply src1 and src2 and store in src0
+    DIV,       // do src1 divided by src2 and store in src0 (signed ints)
+    MOD,       // do src1 mod src2 and store in src0 (signed ints)
+    NEG,       // unary negation. multiply the value in src0 by -1
+
+    // logical operators
+    EQ,        // src0 = (src1 == src2)
+    NEQ,       // src0 = (src1 != src2)
+    GT,        // src0 = (src1 >  src2) (signed)
+    GE,        // src0 = (src1 >= src2) (signed)
+    LT,        // src0 = (src1 <  src2) (signed)
+    LE,        // src0 = (src1 <= src2) (signed)
+
+    // the same set but for every type
+    // unsigned 64-bit
+    ADD_U, SUB_U, MUL_U, DIV_U, MOD_U,
+    NEG_U,
+    EQ_U, NEQ_U, GT_U, GE_U, LT_U, LE_U,
+
+    // 32-bit float
+    ADD_F, SUB_F, MUL_F, DIV_F,
+    NEG_F,
+    EQ_F, NEQ_F, GT_F, GE_F, LT_F, LE_F,
+
+    // 64-bit float
+    ADD_D, SUB_D, MUL_D, DIV_D,
+    NEG_D,
+    EQ_D, NEQ_D, GT_D, GE_D, LT_D, LE_D,
+
+    // typed bitwise ops (integer only)
+    AND_U, OR_U, XOR_U, SHL_U, SHR_U, BNOT_U,
 
     // more here
 } Opcode;

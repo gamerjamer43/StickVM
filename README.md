@@ -237,6 +237,7 @@ The header is 20 bytes containing pretty much all the info anyone needs to know
 - [x] CALL/RET tests (comes with the above)
 
 ### 🔨 Immediate
+- [ ] Make arithmetic operations work with any numeric type (avoid the need for unsigned operators)
 - [ ] TCO and the TAILCALL opcode (force it where you can)
 - [ ] Unsigned ops (DIVU, MODU, GTU, GEU, LTU, LEU)
 - [ ] SAR (arithmetic shift right)

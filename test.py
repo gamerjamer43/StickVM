@@ -17,9 +17,8 @@ HEADER: bytes = b"STIK"
 VERSION: int = 1
 FLAGS: int = 1 if VERBOSE else 0
 
-# opcode table
+# opcode table (see vm/opcodes.h)
 class Opcode(IntEnum):
-    # program stops
     HALT = 0; PANIC = auto()
 
     # ip movement
@@ -31,31 +30,51 @@ class Opcode(IntEnum):
     # call stack
     CALL = auto(); TAILCALL = auto(); RET = auto()
 
-    # arithmetic (unsigned ops denoted U)
-    ADD = auto(); SUB = auto(); MUL = auto()
-    DIV = auto(); DIVU = auto(); MOD = auto(); MODU = auto() 
-    NEG = auto()
-
-    # comparisons
-    EQ = auto(); NEQ = auto()
-    GT = auto(); GTU = auto(); GE = auto(); GEU = auto()
-    LT = auto(); LTU = auto(); LE = auto(); LEU = auto()
-
-    # bitwise 
+    # bitwise
     AND = auto(); OR = auto(); XOR = auto()
     LNOT = auto(); BNOT = auto()
 
     # shifts
     SHL = auto(); SHR = auto(); SAR = auto()
 
+    # heap/tables/arrays/strings (placeholders for now)
+    NEWARR = auto(); NEWTABLE = auto(); NEWOBJ = auto()
+    GETELEM = auto(); SETELEM = auto()
+    ARRGET = auto(); ARRSET = auto(); ARRLEN = auto()
+    CONCAT = auto(); STRLEN = auto()
+
+    # conversions
+    I2D = auto(); I2F = auto(); D2I = auto(); F2I = auto(); I2U = auto(); U2I = auto()
+
+    # arithmetic (signed i64)
+    ADD = auto(); SUB = auto(); MUL = auto(); DIV = auto(); MOD = auto(); NEG = auto()
+
+    # comparisons (signed i64)
+    EQ = auto(); NEQ = auto(); GT = auto(); GE = auto(); LT = auto(); LE = auto()
+
+    # typed unsigned 64-bit
+    ADD_U = auto(); SUB_U = auto(); MUL_U = auto(); DIV_U = auto(); MOD_U = auto(); NEG_U = auto()
+    EQ_U = auto(); NEQ_U = auto(); GT_U = auto(); GE_U = auto(); LT_U = auto(); LE_U = auto()
+
+    # typed float32
+    ADD_F = auto(); SUB_F = auto(); MUL_F = auto(); DIV_F = auto(); NEG_F = auto()
+    EQ_F = auto(); NEQ_F = auto(); GT_F = auto(); GE_F = auto(); LT_F = auto(); LE_F = auto()
+
+    # typed float64
+    ADD_D = auto(); SUB_D = auto(); MUL_D = auto(); DIV_D = auto(); NEG_D = auto()
+    EQ_D = auto(); NEQ_D = auto(); GT_D = auto(); GE_D = auto(); LT_D = auto(); LE_D = auto()
+
+    # typed bitwise (unsigned)
+    AND_U = auto(); OR_U = auto(); XOR_U = auto(); SHL_U = auto(); SHR_U = auto(); BNOT_U = auto()
+
 # type tags (typing.h)
 class Type(IntEnum):
-    NUL = 0; 
+    NUL = 0
     BOOL = auto()
     U64 = auto(); I64 = auto()
     FLOAT = auto(); DOUBLE = auto()
     OBJ = auto()
-    CALL = auto()
+    CALLABLE = auto()
 
 # type helpers (pack to 9 bytes each)
 def nul() -> bytes:            return pack("<Bq", Type.NUL, 0)
@@ -66,7 +85,7 @@ def f32(v: float) -> bytes:    return pack("<Bf", Type.FLOAT, v) + b"\x00" * 4
 def f64(v: float) -> bytes:    return pack("<Bd", Type.DOUBLE, v)
 def func(entry: int, argc: int, regc: int) -> bytes:
     """4 byte function entry, 2 byte argc, 2 byte regc"""
-    return pack("<BIHH", Type.CALL, entry, argc, regc)
+    return pack("<BIHH", Type.CALLABLE, entry, argc, regc)
 
 # ported directly from c lmao
 def ins(op, a = 0, b = 0, c = 0) -> int:
@@ -219,6 +238,97 @@ TESTS += [
 TESTS += [
     pass_if_zero(Opcode.AND, "bonus_and_zero", [LOADI(0, 0b1010), LOADI(1, 0b0101), BIN(Opcode.AND, 2, 0, 1)], 2),
     pass_if_zero(Opcode.XOR, "bonus_xor_self_zero", [LOADI(0, 42), BIN(Opcode.XOR, 1, 0, 0)], 1),
+]
+
+# typed unsigned, float, and double ops (new b/c i just wrote something that worked not something optimized)
+TESTS += [
+    pass_if_truthy(Opcode.ADD_U, "add_u_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.ADD_U, 2, 0, 1)
+    ], 2, consts=(u64(3), u64(4))),
+
+    pass_if_truthy(Opcode.DIV_U, "div_u_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.DIV_U, 2, 0, 1)
+    ], 2, consts=(u64(12), u64(3))),
+
+    pass_if_truthy(Opcode.MOD_U, "mod_u_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.MOD_U, 2, 0, 1)
+    ], 2, consts=(u64(13), u64(5))),
+
+    pass_if_truthy(Opcode.EQ_U, "eq_u_true", [
+        LOADC(0, 0), LOADC(1, 0), BIN(Opcode.EQ_U, 2, 0, 1)
+    ], 2, consts=(u64(123),)),
+
+    pass_if_truthy(Opcode.GT_U, "gt_u_true", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.GT_U, 2, 0, 1)
+    ], 2, consts=(u64(10), u64(2))),
+
+    pass_if_truthy(Opcode.LE_U, "le_u_true", [
+        LOADC(0, 0), LOADC(1, 0), BIN(Opcode.LE_U, 2, 0, 1)
+    ], 2, consts=(u64(77),)),
+
+    pass_if_truthy(Opcode.SHL_U, "shl_u_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.SHL_U, 2, 0, 1)
+    ], 2, consts=(u64(1), u64(4))),
+
+    pass_if_truthy(Opcode.SHR_U, "shr_u_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.SHR_U, 2, 0, 1)
+    ], 2, consts=(u64(16), u64(2))),
+
+    pass_if_truthy(Opcode.AND_U, "and_u_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.AND_U, 2, 0, 1)
+    ], 2, consts=(u64(0b1100), u64(0b0101))),
+
+    pass_if_zero(Opcode.XOR_U, "xor_u_zero", [
+        LOADC(0, 0), BIN(Opcode.XOR_U, 1, 0, 0)
+    ], 1, consts=(u64(0xDEADBEEFCAFEBABE),)),
+
+    pass_if_truthy(Opcode.OR_U, "or_u_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.OR_U, 2, 0, 1)
+    ], 2, consts=(u64(0b1000), u64(0b0001))),
+
+    pass_if_truthy(Opcode.BNOT_U, "bnot_u_nonzero", [
+        LOADC(0, 0), UN(Opcode.BNOT_U, 0)
+    ], 0, consts=(u64(0),)),
+
+    pass_if_truthy(Opcode.ADD_F, "add_f_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.ADD_F, 2, 0, 1)
+    ], 2, consts=(f32(1.5), f32(2.5))),
+
+    pass_if_truthy(Opcode.EQ_F, "eq_f_true", [
+        LOADC(0, 0), LOADC(1, 0), BIN(Opcode.EQ_F, 2, 0, 1)
+    ], 2, consts=(f32(3.25),)),
+
+    pass_if_truthy(Opcode.GT_F, "gt_f_true", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.GT_F, 2, 0, 1)
+    ], 2, consts=(f32(5.0), f32(4.0))),
+
+    pass_if_truthy(Opcode.LE_F, "le_f_true", [
+        LOADC(0, 0), LOADC(1, 0), BIN(Opcode.LE_F, 2, 0, 1)
+    ], 2, consts=(f32(2.0),)),
+
+    pass_if_truthy(Opcode.NEG_F, "neg_f_matches_const", [
+        LOADC(0, 0), UN(Opcode.NEG_F, 0), LOADC(1, 1), BIN(Opcode.EQ_F, 2, 0, 1)
+    ], 2, consts=(f32(5.5), f32(-5.5))),
+
+    pass_if_truthy(Opcode.ADD_D, "add_d_basic", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.ADD_D, 2, 0, 1)
+    ], 2, consts=(f64(1.25), f64(4.75))),
+
+    pass_if_truthy(Opcode.EQ_D, "eq_d_true", [
+        LOADC(0, 0), LOADC(1, 0), BIN(Opcode.EQ_D, 2, 0, 1)
+    ], 2, consts=(f64(6.5),)),
+
+    pass_if_truthy(Opcode.GT_D, "gt_d_true", [
+        LOADC(0, 0), LOADC(1, 1), BIN(Opcode.GT_D, 2, 0, 1)
+    ], 2, consts=(f64(9.0), f64(1.0))),
+
+    pass_if_truthy(Opcode.LE_D, "le_d_true", [
+        LOADC(0, 0), LOADC(1, 0), BIN(Opcode.LE_D, 2, 0, 1)
+    ], 2, consts=(f64(3.0),)),
+
+    pass_if_truthy(Opcode.NEG_D, "neg_d_matches_const", [
+        LOADC(0, 0), UN(Opcode.NEG_D, 0), LOADC(1, 1), BIN(Opcode.EQ_D, 2, 0, 1)
+    ], 2, consts=(f64(7.75), f64(-7.75))),
 ]
 
 # test globals with more than one slot

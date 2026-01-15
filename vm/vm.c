@@ -154,20 +154,6 @@ void vm_load(
 }
 
 /**
- * ensure we have enough registers to store a value, havent added wides yet but 256 prealloced will do
- * TODO: check if i should allow for > 256 frame local registers (and how spills should be dealt with)
- * @param vm the vm instance to check
- * @param need a u32 proclaiming how many registers are needed
- */
-static inline bool ensure_regs(VM* vm, u32 need) {
-    if (need > MAX_REGISTERS) {
-        if (vm) vm->panic_code = PANIC_REG_LIMIT;
-        return false;
-    }
-    return true;
-}
-
-/**
  * add a frame to the stack
  */
 static inline bool push_frame(VM* vm, Frame *frame) {
@@ -370,15 +356,11 @@ bool vm_run(VM* vm) {
                 u32 src = op_a(ins) + vm->current->base;
                 i32 off = op_signed_i16(ins);
 
-                // make sure register is valid before jumping
-                if (src >= MAX_REGISTERS) {
-                    vm->panic_code = PANIC_REG_OVERFLOW;
-                    return false;
-                }
+                if (!ensure_regs(vm, src + 1)) return false;
 
                 // if falsy ignore, but if offset invalid, panic
                 u8 type = vm->regs->types[src];
-                u64 payload = vm->regs->payloads[src];
+                TypedValue payload = vm->regs->payloads[src];
                 if (!value_falsy(type, payload)) {
                     if (!jump_rel(vm, off)) return false;
                 }
@@ -389,15 +371,11 @@ bool vm_run(VM* vm) {
                 u32 src = op_a(ins) + vm->current->base;
                 i32 off = op_signed_i16(ins);
 
-                // make sure register is valid before jumping
-                if (src >= MAX_REGISTERS) {
-                    vm->panic_code = PANIC_REG_OVERFLOW;
-                    return false;
-                }
+                if (!ensure_regs(vm, src + 1)) return false;
 
                 // if falsy ignore, but if offset invalid, panic
                 u8 type = vm->regs->types[src];
-                u64 payload = vm->regs->payloads[src];
+                TypedValue payload = vm->regs->payloads[src];
                 if (value_falsy(type, payload)) {
                     if (!jump_rel(vm, off)) return false;
                 }
@@ -420,7 +398,7 @@ bool vm_run(VM* vm) {
 
                 if (!copy(vm, dest, src, vm->current->base)) return false;
                 vm->regs->types[src + vm->current->base] = 0;
-                vm->regs->payloads[src + vm->current->base] = 0;
+                vm->regs->payloads[src + vm->current->base].u = 0;
                 break;
             }
 
@@ -435,7 +413,7 @@ bool vm_run(VM* vm) {
                 // adjust for base and set
                 u32 adjusted = dest + vm->current->base;
                 vm->regs->types[adjusted] = I64;
-                vm->regs->payloads[adjusted] = imm;
+                vm->regs->payloads[adjusted].i = imm;
                 break;
             }
 
@@ -503,22 +481,16 @@ bool vm_run(VM* vm) {
 
                 // bounds check
                 u32 abs = reg + vm->current->base;
-                if (abs >= MAX_REGISTERS) {
-                    vm->panic_code = PANIC_REG_OVERFLOW;
-                    return false;
-                }
+                if (!ensure_regs(vm, abs + 1)) return false;
 
                 // yoink from register
-                u8  type    = vm->regs->types[abs];
-                u64 payload = vm->regs->payloads[abs];
-                if (type != CALLABLE) {
+                if (vm->regs->types[abs] != CALLABLE) {
                     vm->panic_code = PANIC_INVALID_CALLABLE;
                     return false;
                 }
 
                 // extract pointer
-                Func* fn;
-                memcpy(&fn, &payload, sizeof(Func*));
+                Func* fn = vm->regs->payloads[abs].fn;
                 if (!fn) {
                     vm->panic_code = PANIC_INVALID_CALLABLE;
                     return false;
@@ -562,47 +534,83 @@ bool vm_run(VM* vm) {
             }
 
             // all operators muahahaha (i think) 
-            // binary ops, arithmetic and bitwise
-            case ADD:  BINOP(+);  break;
-            case SUB:  BINOP(-);  break;
-            case MUL:  BINOP(*);  break;
-            case DIV:  BINOP(/);  break;
-            case MOD:  BINOP(%);  break;
-            case AND:  BINOP(&);  break;
-            case OR:   BINOP(|);  break;
-            case XOR:  BINOP(^);  break;
-            case SHL:  BINOP(<<); break;
-            case SHR:  BINOP(>>); break;
+            // binary ops, arithmetic and bitwise (default to signed 64-bit)
+            case ADD:   BINOP_I64(+);  break;
+            case SUB:   BINOP_I64(-);  break;
+            case MUL:   BINOP_I64(*);  break;
+            case DIV:   BINOP_I64(/);  break;
+            case MOD:   BINOP_I64(%);  break;
+            case AND:   BINOP_I64(&);  break;
+            case OR:    BINOP_I64(|);  break;
+            case XOR:   BINOP_I64(^);  break;
+            case SHL:   BINOP_I64(<<); break;
+            case SHR:   BINOP_I64(>>); break;
             // case SAR: figure out what to allow
 
-            // unsigned ops
-            case DIVU: UBINOP(/);  break;
-            case MODU: UBINOP(%);  break;
-            case GTU:  UBINOP(>);  break;
-            case GEU:  UBINOP(>=); break;
-            case LTU:  UBINOP(<);  break;
-            case LEU:  UBINOP(<=); break;
+            // unsigned ops (u64)
+            case ADD_U: BINOP_U64(+); break;
+            case SUB_U: BINOP_U64(-); break;
+            case MUL_U: BINOP_U64(*); break;
+            case DIV_U: BINOP_U64(/); break;
+            case MOD_U: BINOP_U64(%); break;
+            case AND_U: BINOP_U64(&); break;
+            case OR_U:  BINOP_U64(|); break;
+            case XOR_U: BINOP_U64(^); break;
+            case SHL_U: BINOP_U64(<<); break;
+            case SHR_U: BINOP_U64(>>); break;
             
             // boolean comparison ops
-            case EQ:   CMPOP(==); break;
-            case NEQ:  CMPOP(!=); break;
-            case GT:   CMPOP(>);  break;
-            case GE:   CMPOP(>=); break;
-            case LT:   CMPOP(<);  break;
-            case LE:   CMPOP(<=); break;
+            case EQ:    CMPOP_I64(==); break;
+            case NEQ:   CMPOP_I64(!=); break;
+            case GT:    CMPOP_I64(>);  break;
+            case GE:    CMPOP_I64(>=); break;
+            case LT:    CMPOP_I64(<);  break;
+            case LE:    CMPOP_I64(<=); break;
+
+            // u64 comparisons
+            case EQ_U:  CMPOP_U64(==); break;
+            case NEQ_U: CMPOP_U64(!=); break;
+            case GT_U:  CMPOP_U64(>);  break;
+            case GE_U:  CMPOP_U64(>=); break;
+            case LT_U:  CMPOP_U64(<);  break;
+            case LE_U:  CMPOP_U64(<=); break;
+
+            // float ops (f32)
+            case ADD_F: BINOP_F32(+); break;
+            case SUB_F: BINOP_F32(-); break;
+            case MUL_F: BINOP_F32(*); break;
+            case DIV_F: BINOP_F32(/); break;
+            case EQ_F:  CMPOP_F32(==); break;
+            case NEQ_F: CMPOP_F32(!=); break;
+            case GT_F:  CMPOP_F32(>);  break;
+            case GE_F:  CMPOP_F32(>=); break;
+            case LT_F:  CMPOP_F32(<);  break;
+            case LE_F:  CMPOP_F32(<=); break;
+
+            // float ops (f64)
+            case ADD_D: BINOP_F64(+); break;
+            case SUB_D: BINOP_F64(-); break;
+            case MUL_D: BINOP_F64(*); break;
+            case DIV_D: BINOP_F64(/); break;
+            case EQ_D:  CMPOP_F64(==); break;
+            case NEQ_D: CMPOP_F64(!=); break;
+            case GT_D:  CMPOP_F64(>);  break;
+            case GE_D:  CMPOP_F64(>=); break;
+            case LT_D:  CMPOP_F64(<);  break;
+            case LE_D:  CMPOP_F64(<=); break;
 
             // unary ops
-            case NEG:  UNOP(-); break;
-            case BNOT: UNOP(~); break;
+            case NEG:    UNOP_I64(-); break;
+            case NEG_U:  UNOP_U64(-); break;
+            case NEG_F:  UNOP_F32(-); break;
+            case NEG_D:  UNOP_F64(-); break;
+            case BNOT:   UNOP_I64(~); break;
+            case BNOT_U: UNOP_U64(~); break;
             
             // logical not has special cases. ONLY can be used on boolean values. gonna fix jmpif and jmpifz to be the same mayb
             // also prolly gonna figure out a way to fucking dry this cuz its just a type check
             case LNOT: {
                 u32 src = op_a(ins) + vm->current->base;
-                if (src >= MAX_REGISTERS) { 
-                    vm->panic_code = PANIC_REG_OVERFLOW; 
-                    return false; 
-                }
 
                 if (!ensure_regs(vm, src + 1)) return false;
                 if (vm->regs->types[src] != BOOL) { 
@@ -610,7 +618,7 @@ bool vm_run(VM* vm) {
                     return false; 
                 }
                 
-                vm->regs->payloads[src] = vm->regs->payloads[src] ? 0 : 1;
+                vm->regs->payloads[src].u = vm->regs->payloads[src].u ? 0u : 1u;
                 break;
             }
 

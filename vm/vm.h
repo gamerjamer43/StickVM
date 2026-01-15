@@ -92,55 +92,6 @@
 #define VERSION 1
 // #define FLAG_VERBOSE 0x0001 (gonna add this later)
 
-// general binop helper. can do both boolean and general binary operations of any numeric type
-// this will be getting changed tho b/c values atm are all casted to fucking i64 or u64 for unsigned.
-// TODO: add float operations
-#define BINOP_GENERIC(result_type_expr, cast_type, result_expr) do { \
-    u32 dest = op_a(ins); \
-    u32 lhs = op_b(ins) + vm->current->base; \
-    u32 rhs = op_c(ins) + vm->current->base; \
-    \
-    if (lhs >= MAX_REGISTERS || rhs >= MAX_REGISTERS) { \
-        vm->panic_code = PANIC_REG_OVERFLOW; return false; \
-    } \
-    \
-    u32 adjusted = dest + vm->current->base; \
-    if (!ensure_regs(vm, adjusted + 1)) return false; \
-    \
-    u8 ltype = vm->regs->types[lhs]; \
-    u8 rtype = vm->regs->types[rhs]; \
-    if (ltype != rtype) { vm->panic_code = PANIC_TYPE_MISMATCH; return false; } \
-    \
-    cast_type lval = (cast_type)vm->regs->payloads[lhs]; \
-    cast_type rval = (cast_type)vm->regs->payloads[rhs]; \
-    \
-    vm->regs->types[adjusted] = (result_type_expr); \
-    vm->regs->payloads[adjusted] = (u64)(result_expr); \
-} while(0)
-
-// unary op helper. used for like 3 things lmao. reused from my binop helper
-#define UNOP_GENERIC(result_type_expr, cast_type, result_expr) do { \
-    u32 src = op_a(ins) + vm->current->base; \
-    \
-    if (src >= MAX_REGISTERS) { \
-        vm->panic_code = PANIC_REG_OVERFLOW; return false; \
-    } \
-    \
-    if (!ensure_regs(vm, src + 1)) return false; \
-    \
-    u8 stype = vm->regs->types[src]; \
-    cast_type val = (cast_type)vm->regs->payloads[src]; \
-    \
-    vm->regs->types[src] = (result_type_expr); \
-    vm->regs->payloads[src] = (u64)(result_expr); \
-} while(0)
-
-// bin op is just normal, cmp op returns a bool, and unary is just whatever type the operand is
-#define BINOP(OP)  BINOP_GENERIC(ltype, i64, lval OP rval)
-#define UBINOP(OP) BINOP_GENERIC(ltype, u64, lval OP rval)
-#define CMPOP(OP)  BINOP_GENERIC(BOOL, i64, (lval OP rval) ? 1 : 0)
-#define UNOP(OP)   UNOP_GENERIC(stype, i64, OP val)
-
 // pack instructions (shift everything to its proper location)
 static inline Instruction pack(Field op, Field a, Field b, Field c) {
     return ((u32)op << 24) | ((u32)a << 16) | ((u32)b << 8) | ((u32)c);
@@ -243,13 +194,94 @@ bool vm_call(
 // run until HALT/PANIC
 bool vm_run(VM* vm);
 
+// panic helper to print an error message by code
+u32 vm_panic(u32 code);
+
+// operation helpers
+// ensure we have enough registers to store a value
+static inline bool ensure_regs(VM* vm, u32 need) {
+    if (need <= MAX_REGISTERS) return true;
+    if (vm) vm->panic_code = PANIC_REG_LIMIT;
+    return false;
+}
+
+// validate register bounds for an operation with 3 operands and compute their absolute indices
+static inline bool binop_indices(VM* vm, Instruction ins, u32* dest, u32* lhs, u32* rhs) {
+    u32 base = vm->current ? vm->current->base : 0;
+    *dest = op_a(ins) + base;
+    *lhs  = op_b(ins) + base;
+    *rhs  = op_c(ins) + base;
+
+    u32 max = *dest;
+    if (*lhs > max) max = *lhs;
+    if (*rhs > max) max = *rhs;
+
+    return ensure_regs(vm, max + 1);
+}
+
+// validate register bounds for a unary op and compute its absolute index
+static inline bool unary_index(VM* vm, Instruction ins, u32* idx) {
+    u32 base = vm->current ? vm->current->base : 0;
+    *idx = op_a(ins) + base;
+    return ensure_regs(vm, *idx + 1);
+}
+
+// ensure a specific register holds an expected type
+static inline bool require_type(VM* vm, u32 idx, u8 expect) {
+    if (vm->regs->types[idx] != expect) {
+        vm->panic_code = PANIC_TYPE_MISMATCH;
+        return false;
+    }
+    return true;
+}
+
+// macro helpers for typed arithmetic and comparisons
+#define BINOP_TYPED(TAG, FIELD, OP) do { \
+    u32 dest, lhs, rhs; \
+    if (!binop_indices(vm, ins, &dest, &lhs, &rhs)) return false; \
+    if (!require_type(vm, lhs, (TAG)) || !require_type(vm, rhs, (TAG))) return false; \
+    vm->regs->types[dest] = (TAG); \
+    vm->regs->payloads[dest].FIELD = vm->regs->payloads[lhs].FIELD OP vm->regs->payloads[rhs].FIELD; \
+} while (0)
+
+#define CMPOP_TYPED(TAG, FIELD, OP) do { \
+    u32 dest, lhs, rhs; \
+    if (!binop_indices(vm, ins, &dest, &lhs, &rhs)) return false; \
+    if (!require_type(vm, lhs, (TAG)) || !require_type(vm, rhs, (TAG))) return false; \
+    vm->regs->types[dest] = BOOL; \
+    vm->regs->payloads[dest].u = (vm->regs->payloads[lhs].FIELD OP vm->regs->payloads[rhs].FIELD) ? 1u : 0u; \
+} while (0)
+
+#define UNOP_TYPED(TAG, FIELD, OP) do { \
+    u32 idx; \
+    if (!unary_index(vm, ins, &idx)) return false; \
+    if (!require_type(vm, idx, (TAG))) return false; \
+    vm->regs->types[idx] = (TAG); \
+    vm->regs->payloads[idx].FIELD = OP vm->regs->payloads[idx].FIELD; \
+} while (0)
+
+#define BINOP_I64(OP) BINOP_TYPED(I64, i, OP)
+#define BINOP_U64(OP) BINOP_TYPED(U64, u, OP)
+#define BINOP_F32(OP) BINOP_TYPED(FLOAT, f, OP)
+#define BINOP_F64(OP) BINOP_TYPED(DOUBLE, d, OP)
+
+#define CMPOP_I64(OP) CMPOP_TYPED(I64, i, OP)
+#define CMPOP_U64(OP) CMPOP_TYPED(U64, u, OP)
+#define CMPOP_F32(OP) CMPOP_TYPED(FLOAT, f, OP)
+#define CMPOP_F64(OP) CMPOP_TYPED(DOUBLE, d, OP)
+
+#define UNOP_I64(OP) UNOP_TYPED(I64, i, OP)
+#define UNOP_U64(OP) UNOP_TYPED(U64, u, OP)
+#define UNOP_F32(OP) UNOP_TYPED(FLOAT, f, OP)
+#define UNOP_F64(OP) UNOP_TYPED(DOUBLE, d, OP)
+
 // register a native function. may do this a different way
 // Func* vm_new_native(VM* vm, NativeFn fn, u16 argc);
 
 // helper for implicit falisness
 // TODO: decide on forcing all comparisons to bool or treating bool as 0 and everything else as true. 
 // * too tired to write new tests lmao
-static inline bool value_falsy(u8 type, u64 val) {
+static inline bool value_falsy(u8 type, TypedValue val) {
     switch (type) {
         // add a unit type as it's necessary
         case NUL:   return true;       // null always false
@@ -257,12 +289,11 @@ static inline bool value_falsy(u8 type, u64 val) {
         // all these we can do by 0
         case BOOL:
         case I64:
-        case U64:
-            return val == 0;
+        case U64:   return val.u == 0;
 
         // clear signed bit to compare floats properly, 0111 = 7
-        case FLOAT: return (val & 0x7FFFFFFF) == 0;
-        case DOUBLE: return (val & 0x7FFFFFFFFFFFFFFFULL) == 0;
+        case FLOAT:  return val.f == 0.0f;
+        case DOUBLE: return val.d == 0.0;
 
         // objects check if nulled (TODO: make objs and do this)
         // case OBJ:

@@ -90,11 +90,22 @@ typedef struct {
     u8 val[8];
 } Value;
 
+// the actual payload holding the value inside of a register
+typedef union {
+    i64    i;
+    u64    u;
+    double d;
+    float  f;
+    bool   b;
+    Func*  fn;
+    void*  obj;
+} TypedValue;
+
 // this is either gonna be a pointer to a val, or a payload containing a value. width is canonical
 // so you can use u8 but extensions r basically noop.
 typedef struct {
-    u64 payloads[MAX_REGISTERS];
-    u8  types[MAX_REGISTERS];
+    TypedValue payloads[MAX_REGISTERS];
+    u8 types[MAX_REGISTERS];
 } Registers;
 
 // object types
