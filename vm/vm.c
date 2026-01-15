@@ -54,6 +54,16 @@ void vm_free(VM* vm) {
         vm->regs = NULL;
     }
 
+    // free all functions (now stored seperately cuz its way safer)
+    if (vm->funcs) {
+        for (u32 i = 0; i < vm->funccount; i++) {
+            free(vm->funcs[i]);
+        }
+        free(vm->funcs);
+        vm->funcs = NULL;
+        vm->funccount = 0;
+    }
+
     // free instruction stream (casting to void pointer shuts the compiler up)
     if (vm->istream) {
         free((void*)vm->istream);

@@ -143,13 +143,17 @@ typedef struct VM {
 
     // constant pooling (pulled from using LOADC)
     const Value* consts;  // constant pool (allocated at compile time)
-    u32    constcount;    // length of pool
+    u32 constcount;       // length of pool
 
     // instruction pointer
-    u32    ip;
+    u32 ip;
 
     // registers (gonna carve Frames via Frame.base as this is a flat array)
-    Registers *regs;
+    Registers* regs;
+
+    // functions (stored sep from registers for easier access, less register usage, and safer free)
+    Func** funcs;
+    u32    funccount;
 
     // globals table (switching to hash but for rn this is ok)
     Value* globals;
@@ -178,7 +182,7 @@ bool vm_load_file(VM* vm, const char* path);
 // load a chunk from the instruction stream
 void vm_load(
     VM* vm,                                       // pointer to vm (to load into)
-    const Instruction* code, u32 instrcount,        // instruction stream (owned by VM after call)
+    const Instruction* code, u32 instrcount,      // instruction stream (owned by VM after call)
     const Value* consts, u32 constcount,          // const pool (borrowed)
     const Value* globals_init, u32 globalcount    // global pool
 );

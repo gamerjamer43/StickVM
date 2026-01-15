@@ -26,9 +26,12 @@ bool vm_load_file(VM* vm, const char* path) {
         return false;
     }
 
-    // no error or code yet
+    // no error or anything embedded in the program loaded yet
     int err = 0;
     Instruction* code = NULL;
+    Func** funcs = NULL;
+    Value* consts = NULL;
+    Value* globals = NULL;
 
     // header shit (3 = truncated header, make sure it's exactly 20 bytes).
     // it goes: STIK <2 byte version> <2 byte flags> <4 byte instruction count> <4 byte constant count> <4 byte global count>
@@ -97,17 +100,22 @@ bool vm_load_file(VM* vm, const char* path) {
     vm->regs = (Registers*)calloc(1, sizeof(Registers));
     if (!vm->regs) {
         vm->panic_code = PANIC_OOM;
-        return false;
+        goto fail_code;
     }
 
     // MAY EDIT UP THIS SECTION, A DRY FEELS VERY NECESSARY
     // read constant pool after code
-    Value* consts = NULL;
     if (constcount > 0) {
         consts = (Value*)malloc(constcount * sizeof(Value));
         if (!consts || !read_exact(f, (u8*)consts, constcount * sizeof(Value))) {
             err = PANIC_CONST_READ;
-            free(consts);
+            goto fail_code;
+        }
+
+        // allocate function table sized to constants so we can patch callables
+        funcs = (Func**)calloc(constcount, sizeof(Func*));
+        if (!funcs) {
+            err = PANIC_OOM;
             goto fail_code;
         }
         
@@ -126,7 +134,6 @@ bool vm_load_file(VM* vm, const char* path) {
             Func* fn = (Func*)malloc(sizeof(Func));
             if (!fn) {
                 err = PANIC_OOM;
-                free(consts);
                 goto fail_code;
             }
 
@@ -136,19 +143,19 @@ bool vm_load_file(VM* vm, const char* path) {
             fn->as.bc.entry_ip = entry_ip;
             fn->as.bc.argc = argc;
             fn->as.bc.regc = regc;
+            
+            funcs[i] = fn;
             memcpy(consts[i].val, &fn, sizeof(Func*));
-        
+            vm->funccount++;
         }
     }
+    vm->funcs = funcs;
 
     // lastly the global pool
-    Value* globals = NULL;
     if (globalcount > 0) {
         globals = (Value*)malloc(globalcount * sizeof(Value));
         if (!globals || !read_exact(f, (u8*)globals, globalcount * sizeof(Value))) {
             err = PANIC_GLOBAL_READ;
-            free(globals);
-            free(consts);
             goto fail_code;
         }
     }
@@ -161,8 +168,6 @@ bool vm_load_file(VM* vm, const char* path) {
     // ensure real count and listed count of instructions match up (9 = truncated code)
     if (got != count) {
         err = PANIC_TRUNCATED_CODE;
-        free(globals);
-        free(consts);
         goto fail_code;
     }
 
@@ -173,6 +178,12 @@ bool vm_load_file(VM* vm, const char* path) {
         goto fail_code;
     }
 
+    // free moved globals
+    if (globals) {
+        free(globals);
+        globals = NULL;
+    }
+
     // TODO: load constant and global pools next
     // vm->file_flags = flags; will deal with storing flags later
 
@@ -181,6 +192,31 @@ bool vm_load_file(VM* vm, const char* path) {
 // frees code on an error (then falls thru to fail file)
 fail_code:
     free(code);
+
+    // free associated pools
+    if (consts) {
+        free(consts);
+        consts = NULL;
+    }
+
+    if (globals) {
+        free(globals);
+        globals = NULL;
+    }
+
+    if (funcs) {
+        for (u32 i = 0; i < constcount; i++) {
+            free(funcs[i]);
+        }
+        free(funcs);
+        vm->funcs = NULL;
+        vm->funccount = 0;
+    }
+    
+    if (vm->regs) {
+        free(vm->regs);
+        vm->regs = NULL;
+    }
 
 // errors before the code exists or after the code is freed
 fail_file:

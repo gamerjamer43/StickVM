@@ -3,7 +3,7 @@
 .PHONY: all clean run test
 
 CC := gcc
-PYTHON ?= python3
+PYTHON ?= python
 PROGRAMS_DIR := tests
 
 # compiler flags. add -g for debug
