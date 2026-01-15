@@ -6,6 +6,7 @@ from rich.text import Text
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 def main():
     a = ArgumentParser(description="All currently existing opcodes are tested (uh that's a lie besides unsigned ops). If you do your own just reference the folder.")

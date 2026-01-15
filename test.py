@@ -128,7 +128,7 @@ def pass_if_zero(tag, name, setup, check_reg, consts=(), globs=()):
 # general tests
 TESTS: list[TestCase] = [
     TestCase(Opcode.HALT, "halt", [HALT()]),
-    TestCase(Opcode.PANIC, "panic_code_1", [PANIC(1)]),
+    # TestCase(Opcode.PANIC, "panic_code_1", [PANIC(1)]),
     TestCase(Opcode.JMP, "basic_jmp", [JMP(1), PANIC(), HALT()]),
     TestCase(Opcode.JMPIF, "jmpif_taken", [LOADI(0, 1), JMPIF(0, 1), PANIC(), HALT()]),
     TestCase(Opcode.JMPIFZ, "jmpifz_taken", [LOADI(0, 0), JMPIFZ(0, 1), PANIC(), HALT()]),

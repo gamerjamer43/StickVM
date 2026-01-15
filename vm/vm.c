@@ -295,8 +295,8 @@ u32 vm_panic(u32 code) {
     // ansi colors legit arent used anywhere else
     const char* red = "\x1b[31m";
     const char* reset = "\x1b[0m";
-    printf(
-        "%s[ERROR] Code %d: %s%s\n", 
+    fprintf(
+        stderr, "%s[ERROR] Code %d: %s%s\n", 
         red, code, MESSAGES[code], reset
     );
     return code;

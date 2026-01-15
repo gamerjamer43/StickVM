@@ -1,9 +1,9 @@
 # all commands
 .DEFAULT_GOAL := all
-.PHONY: all clean run programs
+.PHONY: all clean run test
 
 CC := gcc
-PYTHON ?= python
+PYTHON ?= python3
 PROGRAMS_DIR := tests
 
 # compiler flags. add -g for debug
@@ -27,7 +27,7 @@ clean:
 	-@if exist $(PROGRAMS_DIR) rmdir /S /Q $(PROGRAMS_DIR)
 
 else
-TARGET := vm
+TARGET := vm.out
 RUN    := ./$(TARGET)
 
 clean:
@@ -38,10 +38,11 @@ endif
 # default rm for non-windows
 RM := rm -f
 
-all: programs $(TARGET)
+all: test $(TARGET)
 
-programs:
+test: clean $(TARGET)
 	$(PYTHON) test.py
+	$(PYTHON) runner.py
 
 $(TARGET): $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $@
