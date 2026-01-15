@@ -533,6 +533,18 @@ bool vm_run(VM* vm) {
                 break;
             }
 
+            // cast helpers
+            case I2D: CAST_TYPED(I64, i, DOUBLE, d, (double)vm->regs->payloads[src].i); break;
+            case I2F: CAST_TYPED(I64, i, FLOAT,  f, (float)vm->regs->payloads[src].i);  break;
+            case D2I: CAST_TYPED(DOUBLE, d, I64, i, (i64)vm->regs->payloads[src].d);    break;
+            case F2I: CAST_TYPED(FLOAT,  f, I64, i, (i64)vm->regs->payloads[src].f);    break;
+            case I2U: CAST_TYPED(I64, i, U64, u, (u64)vm->regs->payloads[src].i);       break;
+            case U2I: CAST_TYPED(U64, u, I64, i, (i64)vm->regs->payloads[src].u);       break;
+            case U2D: CAST_TYPED(U64, u, DOUBLE, d, (double)vm->regs->payloads[src].u); break;
+            case U2F: CAST_TYPED(U64, u, FLOAT,  f, (float)vm->regs->payloads[src].u);  break;
+            case D2U: CAST_TYPED(DOUBLE, d, U64, u, (u64)vm->regs->payloads[src].d);    break;
+            case F2U: CAST_TYPED(FLOAT,  f, U64, u, (u64)vm->regs->payloads[src].f);    break;
+
             // all operators muahahaha (i think) 
             // binary ops, arithmetic and bitwise (default to signed 64-bit)
             case ADD:   BINOP_I64(+);  break;
@@ -548,14 +560,14 @@ bool vm_run(VM* vm) {
             // case SAR: figure out what to allow
 
             // unsigned ops (u64)
-            case ADD_U: BINOP_U64(+); break;
-            case SUB_U: BINOP_U64(-); break;
-            case MUL_U: BINOP_U64(*); break;
-            case DIV_U: BINOP_U64(/); break;
-            case MOD_U: BINOP_U64(%); break;
-            case AND_U: BINOP_U64(&); break;
-            case OR_U:  BINOP_U64(|); break;
-            case XOR_U: BINOP_U64(^); break;
+            case ADD_U: BINOP_U64(+);  break;
+            case SUB_U: BINOP_U64(-);  break;
+            case MUL_U: BINOP_U64(*);  break;
+            case DIV_U: BINOP_U64(/);  break;
+            case MOD_U: BINOP_U64(%);  break;
+            case AND_U: BINOP_U64(&);  break;
+            case OR_U:  BINOP_U64(|);  break;
+            case XOR_U: BINOP_U64(^);  break;
             case SHL_U: BINOP_U64(<<); break;
             case SHR_U: BINOP_U64(>>); break;
             
@@ -576,10 +588,10 @@ bool vm_run(VM* vm) {
             case LE_U:  CMPOP_U64(<=); break;
 
             // float ops (f32)
-            case ADD_F: BINOP_F32(+); break;
-            case SUB_F: BINOP_F32(-); break;
-            case MUL_F: BINOP_F32(*); break;
-            case DIV_F: BINOP_F32(/); break;
+            case ADD_F: BINOP_F32(+);  break;
+            case SUB_F: BINOP_F32(-);  break;
+            case MUL_F: BINOP_F32(*);  break;
+            case DIV_F: BINOP_F32(/);  break;
             case EQ_F:  CMPOP_F32(==); break;
             case NEQ_F: CMPOP_F32(!=); break;
             case GT_F:  CMPOP_F32(>);  break;
@@ -588,10 +600,10 @@ bool vm_run(VM* vm) {
             case LE_F:  CMPOP_F32(<=); break;
 
             // float ops (f64)
-            case ADD_D: BINOP_F64(+); break;
-            case SUB_D: BINOP_F64(-); break;
-            case MUL_D: BINOP_F64(*); break;
-            case DIV_D: BINOP_F64(/); break;
+            case ADD_D: BINOP_F64(+);  break;
+            case SUB_D: BINOP_F64(-);  break;
+            case MUL_D: BINOP_F64(*);  break;
+            case DIV_D: BINOP_F64(/);  break;
             case EQ_D:  CMPOP_F64(==); break;
             case NEQ_D: CMPOP_F64(!=); break;
             case GT_D:  CMPOP_F64(>);  break;
@@ -600,12 +612,12 @@ bool vm_run(VM* vm) {
             case LE_D:  CMPOP_F64(<=); break;
 
             // unary ops
-            case NEG:    UNOP_I64(-); break;
-            case NEG_U:  UNOP_U64(-); break;
-            case NEG_F:  UNOP_F32(-); break;
-            case NEG_D:  UNOP_F64(-); break;
-            case BNOT:   UNOP_I64(~); break;
-            case BNOT_U: UNOP_U64(~); break;
+            case NEG:    UNOP_I64(-);  break;
+            case NEG_U:  UNOP_U64(-);  break;
+            case NEG_F:  UNOP_F32(-);  break;
+            case NEG_D:  UNOP_F64(-);  break;
+            case BNOT:   UNOP_I64(~);  break;
+            case BNOT_U: UNOP_U64(~);  break;
             
             // logical not has special cases. ONLY can be used on boolean values. gonna fix jmpif and jmpifz to be the same mayb
             // also prolly gonna figure out a way to fucking dry this cuz its just a type check

@@ -197,6 +197,7 @@ bool vm_run(VM* vm);
 // panic helper to print an error message by code
 u32 vm_panic(u32 code);
 
+
 // operation helpers
 // ensure we have enough registers to store a value
 static inline bool ensure_regs(VM* vm, u32 need) {
@@ -260,6 +261,18 @@ static inline bool require_type(VM* vm, u32 idx, u8 expect) {
     vm->regs->payloads[idx].FIELD = OP vm->regs->payloads[idx].FIELD; \
 } while (0)
 
+// conversion helper (dest = op_a, src = op_b)
+#define CAST_TYPED(SRC_TAG, SRC_FIELD, DST_TAG, DST_FIELD, EXPR) do { \
+    u32 dest = op_a(ins) + vm->current->base; \
+    u32 src  = op_b(ins) + vm->current->base; \
+    u32 need = (dest > src ? dest : src) + 1; \
+    if (!ensure_regs(vm, need)) return false; \
+    if (!require_type(vm, src, (SRC_TAG))) return false; \
+    vm->regs->types[dest] = (DST_TAG); \
+    vm->regs->payloads[dest].DST_FIELD = (EXPR); \
+} while (0)
+
+// aliases for typed ops to remove some clutter
 #define BINOP_I64(OP) BINOP_TYPED(I64, i, OP)
 #define BINOP_U64(OP) BINOP_TYPED(U64, u, OP)
 #define BINOP_F32(OP) BINOP_TYPED(FLOAT, f, OP)

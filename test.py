@@ -33,8 +33,6 @@ class Opcode(IntEnum):
     # bitwise
     AND = auto(); OR = auto(); XOR = auto()
     LNOT = auto(); BNOT = auto()
-
-    # shifts
     SHL = auto(); SHR = auto(); SAR = auto()
 
     # heap/tables/arrays/strings (placeholders for now)
@@ -45,6 +43,7 @@ class Opcode(IntEnum):
 
     # conversions
     I2D = auto(); I2F = auto(); D2I = auto(); F2I = auto(); I2U = auto(); U2I = auto()
+    U2D = auto(); U2F = auto(); D2U = auto(); F2U = auto()
 
     # arithmetic (signed i64)
     ADD = auto(); SUB = auto(); MUL = auto(); DIV = auto(); MOD = auto(); NEG = auto()
@@ -156,6 +155,49 @@ TESTS += [
     pass_if_truthy(Opcode.LOADG, "loadg_storeg",
         [LOADC(0, 0), STOREG(0, 0), LOADG(1, 0)], 1,
         consts=(i64(42),), globs=(i64(0),)),
+]
+
+# casts
+TESTS += [
+    pass_if_truthy(Opcode.I2D, "i2d_basic", [
+        LOADC(0, 0), BIN(Opcode.I2D, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ_D, 3, 1, 2)
+    ], 3, consts=(i64(7), f64(7.0))),
+
+    pass_if_truthy(Opcode.I2F, "i2f_basic", [
+        LOADC(0, 0), BIN(Opcode.I2F, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ_F, 3, 1, 2)
+    ], 3, consts=(i64(11), f32(11.0))),
+
+    pass_if_truthy(Opcode.D2I, "d2i_basic", [
+        LOADC(0, 0), BIN(Opcode.D2I, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ, 3, 1, 2)
+    ], 3, consts=(f64(42.0), i64(42))),
+
+    pass_if_truthy(Opcode.F2I, "f2i_basic", [
+        LOADC(0, 0), BIN(Opcode.F2I, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ, 3, 1, 2)
+    ], 3, consts=(f32(10.0), i64(10))),
+
+    pass_if_truthy(Opcode.I2U, "i2u_basic", [
+        LOADC(0, 0), BIN(Opcode.I2U, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ_U, 3, 1, 2)
+    ], 3, consts=(i64(123456789), u64(123456789))),
+
+    pass_if_truthy(Opcode.U2I, "u2i_basic", [
+        LOADC(0, 0), BIN(Opcode.U2I, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ, 3, 1, 2)
+    ], 3, consts=(u64(55), i64(55))),
+
+    pass_if_truthy(Opcode.U2D, "u2d_basic", [
+        LOADC(0, 0), BIN(Opcode.U2D, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ_D, 3, 1, 2)
+    ], 3, consts=(u64(9001), f64(9001.0))),
+
+    pass_if_truthy(Opcode.U2F, "u2f_basic", [
+        LOADC(0, 0), BIN(Opcode.U2F, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ_F, 3, 1, 2)
+    ], 3, consts=(u64(77), f32(77.0))),
+
+    pass_if_truthy(Opcode.D2U, "d2u_basic", [
+        LOADC(0, 0), BIN(Opcode.D2U, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ_U, 3, 1, 2)
+    ], 3, consts=(f64(123.0), u64(123))),
+
+    pass_if_truthy(Opcode.F2U, "f2u_basic", [
+        LOADC(0, 0), BIN(Opcode.F2U, 1, 0, 0), LOADC(2, 1), BIN(Opcode.EQ_U, 3, 1, 2)
+    ], 3, consts=(f32(15.0), u64(15))),
 ]
 
 # arithmetic ops (just check for non zero values)

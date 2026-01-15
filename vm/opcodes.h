@@ -79,6 +79,10 @@ typedef enum {
     F2I,       // float to int. dst = (i64)src1
     I2U,       // signed to unsigned 64 bit. dst = (u64)src1
     U2I,       // unsigned to signed 64 bit. dst = (i64)src1
+    U2D,       // unsigned int to double
+    U2F,       // unsigned int to float
+    D2U,       // double to unsigned int
+    F2U,       // float to unsigned int
 
     // arithmetic operators
     ADD,       // add src1 and src2 and store in the src0
