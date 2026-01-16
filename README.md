@@ -13,9 +13,8 @@
 
 - [Introduction](#introduction)
 - [Specs](#specs)
-- [Planned Features](#planned-features)
 - [Quickstart](#quickstart)
-- [Architecture](#architecture)
+<!-- - [Architecture](#architecture) add here -->
 - [Current Instruction Set](#currently-implemented)
 - [File Format](#file-format)
 - [Development logs](#development-logs)
@@ -25,6 +24,7 @@
 ## Introduction
 
 <h3 align="center">StickVM is a simple, stable and fast register VM, with tightly packed 32 bit instructions you make the most out of each operation. The design is meant to be extremely compute light, optimizing for minimal cycle count and low memory footprint wherever possible. This makes it <b>perfect</b> for both embedding in larger projects, and using standalone for raw power. The goal is a clean, portable runtime that's easy to understand and extend.</h3>
+**NOTE: this is heavily in prod, and I am in school, but I'm still goin nuts. List of current stuff on my backlog in [TODO](TODO.md)**
 
 ## Specs
 
@@ -34,7 +34,7 @@
 - **Constant & global pools** — Constants are immutable and baked in at compile time. Globals are mutable and persist across the entire runtime. No need to construct values at runtime, they just get loaded in.
 - **Frame Based Model** — In the way the actual stack works, space is reserved for the entry frame (aka main) on run. From there, frames are pushed and popped until we reach the bottom layers end, in which case it will expect a halt (if none is found it will panic with Code 1, though I could make it automatically insert). Registers are local to the VM with the frame reserving a base value to start placing registers at on creation.
 - **Values fixed 9 byte width, no packing** — I toyed around with this in 5 different ways and found a solution I really like. Constant/Global values are stored as u8 byte arrays pretty much, and all the others live in a properly aligned registers "file". Cuz I'm crazy, I will likely still look into alternative options, but this leaves us at 9 bytes fixed no matter what, "wasting" only one for the type. If I were to NAN box I would not be able to do typed canonical widths, so this allows extension to basically just be a noop. The layout is:
-- **C99 Base** — I'm potentially looking into switching to gnu99, but plain ISO C99 is working just fine, and I don't necessarily need typeof because types are stored seperately and punned.
+- **C99 Base** — I'm potentially looking into switching to gnu99, but plain ISO C99 is working just fine, and I don't necessarily need typeof because types are stored separately and punned.
 ```c
 // constants, globals, and values that otherwise need to be serialized. if we do not need to memcpy more than once in a hot loop it only costs abt 2 cycles + disk/ram overhead
 typedef struct {
@@ -205,8 +205,36 @@ The body contains a list of 32 bit instructions (count matches the listed instru
 ```
 
 ## Roadmap
+**MAIN DESIGN GOALS:**
+- Open paradigm, allowing you to work:
+    - Functionally using no objects/structs and supporting features like:
+        - Tail call
+        - [Algebraic Data Types](https://en.wikipedia.org/wiki/Algebraic_data_type)(ADT)
+        - Other thoughts later it's 3 am...
+    - Imperatively:
+        - Packed structs
+        - Pointers and referencing (though will have a safety element on top, likely compile AND runtime... so I prolly won't optimize off rip)
+        - Again read the above. Brain slurry. I got class at 9 am and it's 3:43 🗿
+    - 
+- Rust power (heavily expands on some features from C/C++ with added mem safety)
+- Python simplicity (using OOP/imperative paradigms)
+- Go learning curve (super flat)
+- and Lua/JS embeddability.
+I hope this creates for an interesting (and original) concept that gives you the most power you could have in any context. Browser embed would be cool but I'd have to figure out how to that without Cheerp (again, 3 am!!!)
+
+**Scope:**
+- further work out the design for my front end portion of the language
+- build a compiler and VM combo that runs with very low cycle latency
+- add compiler opts that can be done without a JIT (see below)
+- my main goal, add a wide standard lib and allow for: webservers, C ffi (and MAYBE abi??? scope check!), and push this into CI/CD (new full updates 4 times a year, nightly once a week)
+- potentially get into a JIT, though Rust/C interoperability is questionable
+
+
+**Stretch goals:**
+- too fucking tired. coming tomorrow. its now 4 i said i was going to bed at 12:30 lmao <img src="https://files.catbox.moe/qa8fqo.webp" width="20" style="vertical-align: middle;">
 
 ### Planned Syntax:
+**ALSO ON THE TODO: complete the spec.
 Imports are easy, potentially will make a preprocessor, which will then make it a directive using `#`
 ```
 // libs will already be compiled (i hope)
@@ -276,18 +304,24 @@ I may also go parenthesis optional, allowing for:
 writeln yoName + “ dat yo name”
 writefn “%s”, yoName
 ```
-
+You may find a lot of the syntax similar to Go and Rust. This is because I've done a lot of reading into the design of C++, Java, Go, Rust, Lua, Python, and as you may see a wide selection of other Bytecode VMs AND fully compiled features (with the goal of making this super easily embeddable. Into what? I don't know, but I'm keeping the footpring light!)
 ### Planned Features (no course for implementation yet)
+- **Register Prealloc** — On load, provide instructions to prefill registers and execute BEFORE running the program. This reduces movement unless you somehow use over 256 registers and need to reuse values (aye... use the constant pool).
 - **Tail-call Optimization** — I cannot tell how often TCO is used, but all I know is that I rarely see it taken advantage of in the languages I use. Tail-call allows you to use the previous stack frame for your next iteration, setting the speed similar to that of a linear operation. This VM will PRIORITIZE tail-call if it can be done, and my goal for a compiler opt is, in the event an unoptimized call is found (that hits some criterion), the function content itself is modified to have an inner and outer, so that it could be converted into a proper tail-call.
 - **Mark-and-Sweep (M&S) GC vs Refcounting (RC)** — Not entirely sure if I want to do M&S or refcounting. Both have their perks and downsides, for one refcounting is way easier to implement, and I can stop the circular reference bs by just checking if two objects only reference each other in a loop, and then freeing them both (from this mortal realm). I also do not know how to offer both standard and atomic reference counting. I buy myself a lot more allowed complexity and safety if I learn how to properly implement M&S.
-- **Basic Compiler Optimizations** — There's probably about a hundred glaring optimizations I can make during compile time to make it much less of a hassle on startup, wind down, or on hot loops. A small excerpt: <p style="margin-bottom:5px;"></p>
-    1. Constant Folding. If there's an expression that can reliably evaluate to an integer constant (i.e. int x = 2 + 3) it will be "folded" (more or less solved and THEN constant pooled, i.e. int x = 6) to avoid the extra operation
-    2. Dead Code Trimming. If there's unreachable code, we're going to warn the user at the very least. Now the question is do I want to FORCE them to listen or just make it a compiler warning.
-    3. Branch Prediction. If a branch is highly more likely to happen than another (this may require a JIT) it will be made the happy path, and any sort of else statement will be a jump OUT of that loop. 
-    4. Inlining and Macros. This can easily be done as the first step of the compiler. Basically anything macroed or inlined will never hit the Bytecode vm, and will instead be embedded directly as an instruction.
-    5. String interning. This would be for memory footprint, but in the event a string is reused, it will be interned and the reference will be saved instead of needlessly reallocating.
-    6. Stack Allocate when in Scope. If a value does not escape local scope, it can be often be allocated on the stack (this does not apply for dynamically sized elements). Otherwise it goes on the heap and is stored as a global (then pointed to ofc).
-    7. Inline CACHING. the most recent function call is cached so we don't have to pull it again. good for hot loops.
+- **Basic Compiler Opts** — There's probably about a hundred glaring optimizations I can make during compile time to make it much less of a hassle on startup, wind down, or on hot loops. A small excerpt: <p style="margin-bottom:5px;"></p>
+    - Constant Folding. If there's an expression that can reliably evaluate to an integer constant (i.e. int x = 2 + 3) it will be "folded" (more or less solved and THEN constant pooled, i.e. int x = 6) to avoid the extra operation
+    - Dead Code Trimming. If there's unreachable code, we're going to warn the user at the very least. Now the question is do I want to FORCE them to listen or just make it a compiler warning.
+    - Branch Prediction/Elimination. If a branch is highly more likely to happen than another (this may require a JIT) it will be made the happy path or straight up removed. Any sort of else statement will be a jump OUT of that loop. 
+    - Inlining and Macros. This can easily be done as the first step of the compiler. Basically anything macroed or inlined will never hit the Bytecode vm, and will instead be embedded directly as an instruction.
+    - String interning. This would be for memory footprint, but in the event a string is reused, it will be interned and the reference will be saved instead of needlessly reallocating.
+    - Stack Allocate when in Scope. If a value does not escape local scope, it can be often be allocated on the stack (this does not apply for dynamically sized elements). Otherwise it goes on the heap and is stored as a global (then pointed to ofc).
+    - Inline CACHING. the most recent function call is cached so we don't have to pull it again. good for hot loops.
+    - Function transpilation. If it is identified as a potential hotspot during compile time (may require mild tracing) we can transpile it into C (rather than inline asm, which is platform specific and requires me to switch to GNU99). May look ugly but opcodes are clearly defined to almost 100% of the time transpile cleanly when done left to right.
+- **Unsafe Opts** — There's ALSO a load of UNSAFE ones I can add, which would require a bytecode verifier. I would not feel comfortable doing this until I know every aspect is completely good. I don't want CVEs in the browser...
+    - Bounds Check Elim. If we can prove a value will not go out of bounds (or 99.99% of the time it's determinable at compile time) we don't have to bounds check it. We would want to do this at compile time with a flag most likely. I have flag space inside the padding if I fuck off and allow 16 byte vals... then payload can just be a u64...
+    - Null Check Elim. If a value is provably NEVER NULL, we don't need to check if it's null. I don't have anything that requires this rn but as it develops fields may be empty, and anything uninitialized should be NUL instead of a runtime error or UB (which we don't want UB that's a CVE...)
+    - Type Check Elim. If we can verify what's going in, there's no reason for the extra latency of a type check. Ops would only take a little movement to warm, less than a JIT (though a JIT provides more power once fully warm).
 - **Lazy Evaluation** — I already have this planned relatively soon. The thought would be to create a u8 type CELL (which stores a sort of frozen computation), which will then be evaluated (prolly the basic cell will allow for multiple methods of evaluation based on usage, but i only have once locks in mind like Rust for right now.) or CLOSURE (which Rust also has but works for both cells and closures).
 - **Stack Tracing & Disassembler** — This is gonna be hard at the bytecode level, unless I create a DISASSEMBLER. I may just deal with that at the compiler level, and make any errors throw a generic error that kinda tells you where your error is coming from. But this is deffo a lot later on the list, potentially even after the JIT.
 - **Again... "more stuff"** — I still have plenty more to research, so this will be incrementally optimized. Once the core language is done and school picks up **this will still be in maintenance,** although I plan to only sink about 3 hours a week into dedicated tasks.
@@ -333,14 +367,15 @@ writefn “%s”, yoName
 
 ## Contributing
 
-PRs welcome. Keep changes focused. Match the existing style.
+I'm working on this as a personal project, so if you really want me to start dropping some PRs, I'd appreciate it! Though, I have a weird coding style that you may not like to adapt...
 
 ## Acknowledgments
 
 ### Built with 🔧:
-- Pure C99 (may jump it to C11 for _Generic and _Static_assert, better runtime handling). No external deps.
+- Pure C99*. No external deps.
 - Numpy, rich, and the pystdlib for just the tests.
 - A lack of desire to sleep, and a lot of vyvanse :)
+<p style="font-size:10"><b>*(may jump it to C11 for _Generic and _Static_assert, better runtime handling)</b></p>
 
 ---
 

@@ -54,7 +54,7 @@ void vm_free(VM* vm) {
         vm->regs = NULL;
     }
 
-    // free all functions (now stored seperately cuz its way safer)
+    // free all functions (now stored separately cuz its way safer)
     if (vm->funcs) {
         for (u32 i = 0; i < vm->funccount; i++) {
             free(vm->funcs[i]);
@@ -643,16 +643,6 @@ bool vm_run(VM* vm) {
                 vm->regs->payloads[src].u = vm->regs->payloads[src].u ? 0u : 1u;
                 break;
             }
-
-            // LEFT TO IMPLEMENT SO FAR:
-            // SAR - arithmetic shift right
-            // TAILCALL - reuse the same stack frame for a recursive call
-            // NEWARR, NEWTABLE, NEWOBJ - heap allocated objects
-            // GETELEM, SETELEM - hash table operations
-            // ARRGET, ARRSET, ARRLEN - arrray operations
-            // CONCAT, STRLEN - string operations
-            // I2D, I2F, D2I, F2I - signed conversions (ADD I2U, U2I)
-            // U2D, U2F, D2U, F2U - unsigned conversions (ADD THESE OPCODES)
 
             // nothing matched (9 = invalid opcode)
             default: {

@@ -1,7 +1,7 @@
 /**
  * @file errors.h
  * @author Noah Mingolelli
- * @brief yes i really did make another fucking header just for errors. these need to be seperate
+ * @brief yes i really did make another fucking header just for errors. these need to be separate
  * legit just the panic spec and an array containing every error in the order of their panic code
  */
 #ifndef ERRORS_H

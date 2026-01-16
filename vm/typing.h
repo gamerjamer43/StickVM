@@ -3,7 +3,7 @@
  * @author Noah Mingolelli
  * @brief a header for anything that has to do with assigning type
  * the instruction typedef, type enum, and value struct all live here
- * just to seperate this from the general vm header
+ * just to separate this from the general vm header
  *
  * Instruction -> u32 (to use fixed 32 bit packed ints for instructions)
  *
@@ -65,6 +65,16 @@ enum Type {
     OBJ      = 6,   // a general object
     CALLABLE = 7,   // a callable
 };
+
+// these macros allow for me to expect a condition to be more likely true or false
+// still a compiler hint but will liekly happen
+#if defined(__GNUC__) || defined(__clang__)
+  #define LIKELYTRUE(x)   __builtin_expect(!!(x), 1)
+  #define LIKELYFALSE(x) __builtin_expect(!!(x), 0)
+#else
+  #define LIKELYTRUE(x)   (x)
+  #define LIKELYFALSE(x) (x)
+#endif
 
 // starting amount of registers for entry frame
 #define BASE_REGISTERS 16
@@ -138,6 +148,9 @@ typedef enum {
 // gotta forward decl to use in TypedValue
 typedef struct Func Func;
 
+// forward decl so NativeFn can take VM*, and this is also used in heap.h
+typedef struct VM VM;
+
 // standardized 9 byte value struct, problem with padding solved due to u8 packing
 // problem with overhead solved due to register file
 typedef struct {
@@ -153,6 +166,8 @@ typedef union {
     float  f;
     bool   b;
     Func*  fn;
+
+    // change to an obj pointer shits fucked rn
     void*  obj;
 } TypedValue;
 
@@ -162,13 +177,6 @@ typedef struct {
     TypedValue payloads[MAX_REGISTERS];
     u8 types[MAX_REGISTERS];
 } Registers;
-
-// object types
-typedef struct Obj Obj; // dunno how to do this yet
-
-// this has to be above the funcs ig
-// forward decl so NativeFn can take VM*
-typedef struct VM VM;
 
 // allow C natives (pointer to a function that takes these args, this is a feature of the language)
 // to be properly passed to value. base is the register index where args start

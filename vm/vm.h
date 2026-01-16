@@ -132,12 +132,13 @@ static inline i32 op_signed_i24(Instruction ins) {
 
 // call frames
 typedef struct Frame {
-    u32   jump;       // where to jump back to upon return
-    u16   base;       // base register index for this call (registers are owned by the vm)
-    u16   regc;       // number of registers reserved for this frame
-    u16   reg;        // register to store return value in
-    Func* callee;     // function currently being executed
+    u32   jump;    // where to jump back to upon return
+    u16   base;    // base register index for this call (registers are owned by the vm)
+    u16   regc;    // number of registers reserved for this frame
+    u16   reg;     // register to store return value in
+    Func* callee;  // function currently being executed
 } Frame;
+
 
 // the big dawg
 typedef struct VM {
@@ -247,7 +248,7 @@ static inline bool require_type(VM* vm, u32 idx, u8 expect) {
 // register a native function. may do this a different way
 // Func* vm_new_native(VM* vm, NativeFn fn, u16 argc);
 
-// helper for implicit falisness
+// helper for implicit falsiness
 // TODO: decide on forcing all comparisons to bool or treating bool as 0 and everything else as true. 
 // * too tired to write new tests lmao
 static inline bool value_falsy(u8 type, TypedValue val) {
