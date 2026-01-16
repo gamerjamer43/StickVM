@@ -73,6 +73,61 @@ enum Type {
 #define MAX_REGISTERS 65536
 #define MAX_FRAMES 256
 
+// typed operations/type conversions (ugly but it works and is cycle light)
+// type requirement will be removed in prod once i add a verifier
+// macro helpers for typed arithmetic and comparisons
+#define BINOP_TYPED(TAG, FIELD, OP) do { \
+    u32 dest, lhs, rhs; \
+    if (!binop_indices(vm, ins, &dest, &lhs, &rhs)) return false; \
+    if (!require_type(vm, lhs, (TAG)) || !require_type(vm, rhs, (TAG))) return false; \
+    vm->regs->types[dest] = (TAG); \
+    vm->regs->payloads[dest].FIELD = vm->regs->payloads[lhs].FIELD OP vm->regs->payloads[rhs].FIELD; \
+} while (0)
+
+#define CMPOP_TYPED(TAG, FIELD, OP) do { \
+    u32 dest, lhs, rhs; \
+    if (!binop_indices(vm, ins, &dest, &lhs, &rhs)) return false; \
+    if (!require_type(vm, lhs, (TAG)) || !require_type(vm, rhs, (TAG))) return false; \
+    vm->regs->types[dest] = BOOL; \
+    vm->regs->payloads[dest].u = (vm->regs->payloads[lhs].FIELD OP vm->regs->payloads[rhs].FIELD) ? 1u : 0u; \
+} while (0)
+
+#define UNOP_TYPED(TAG, FIELD, OP) do { \
+    u32 idx; \
+    if (!unary_index(vm, ins, &idx)) return false; \
+    if (!require_type(vm, idx, (TAG))) return false; \
+    vm->regs->types[idx] = (TAG); \
+    vm->regs->payloads[idx].FIELD = OP vm->regs->payloads[idx].FIELD; \
+} while (0)
+
+// conversion helper (dest = op_a, src = op_b)
+#define CAST_TYPED(SRC_TAG, SRC_FIELD, DST_TAG, DST_FIELD, EXPR) do { \
+    u32 dest = op_a(ins) + vm->current->base; \
+    u32 src  = op_b(ins) + vm->current->base; \
+    u32 need = (dest > src ? dest : src) + 1; \
+    if (!ensure_regs(vm, need)) return false; \
+    if (!require_type(vm, src, (SRC_TAG))) return false; \
+    vm->regs->types[dest] = (DST_TAG); \
+    vm->regs->payloads[dest].DST_FIELD = (EXPR); \
+} while (0)
+
+// aliases for typed ops to remove some clutter
+#define BINOP_I64(OP) BINOP_TYPED(I64, i, OP)
+#define BINOP_U64(OP) BINOP_TYPED(U64, u, OP)
+#define BINOP_F32(OP) BINOP_TYPED(FLOAT, f, OP)
+#define BINOP_F64(OP) BINOP_TYPED(DOUBLE, d, OP)
+
+#define CMPOP_I64(OP) CMPOP_TYPED(I64, i, OP)
+#define CMPOP_U64(OP) CMPOP_TYPED(U64, u, OP)
+#define CMPOP_F32(OP) CMPOP_TYPED(FLOAT, f, OP)
+#define CMPOP_F64(OP) CMPOP_TYPED(DOUBLE, d, OP)
+
+#define UNOP_I64(OP) UNOP_TYPED(I64, i, OP)
+#define UNOP_U64(OP) UNOP_TYPED(U64, u, OP)
+#define UNOP_F32(OP) UNOP_TYPED(FLOAT, f, OP)
+#define UNOP_F64(OP) UNOP_TYPED(DOUBLE, d, OP)
+
+
 // support for native C functions will be added.
 // this is so webservers and shit can exist
 typedef enum {
@@ -80,7 +135,7 @@ typedef enum {
     NATIVE,
 } FuncType;
 
-// forward declare AND create alias for both (may not do for Value as idk if i need)
+// gotta forward decl to use in TypedValue
 typedef struct Func Func;
 
 // standardized 9 byte value struct, problem with padding solved due to u8 packing
@@ -110,18 +165,6 @@ typedef struct {
 
 // object types
 typedef struct Obj Obj; // dunno how to do this yet
-
-typedef struct {
-    size_t charc;  // c length - 1 to exclude null term
-    char* value[]; // string content
-} ObjStr;
-
-typedef struct {
-    size_t itemc;  // how many items are in the array
-    void* value[]; // whatever content the type has
-} ObjArray;
-
-typedef struct ObjTable ObjTable;  // write a hashtable impl for this
 
 // this has to be above the funcs ig
 // forward decl so NativeFn can take VM*

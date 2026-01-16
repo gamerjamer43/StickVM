@@ -86,6 +86,7 @@
 #include "typing.h"
 #include "opcodes.h"
 #include "errors.h"
+#include "heap.h"
 
 // debug flag (WILL BE REMOVED)
 #define DEBUG 0
@@ -242,58 +243,6 @@ static inline bool require_type(VM* vm, u32 idx, u8 expect) {
     }
     return true;
 }
-
-// macro helpers for typed arithmetic and comparisons
-#define BINOP_TYPED(TAG, FIELD, OP) do { \
-    u32 dest, lhs, rhs; \
-    if (!binop_indices(vm, ins, &dest, &lhs, &rhs)) return false; \
-    if (!require_type(vm, lhs, (TAG)) || !require_type(vm, rhs, (TAG))) return false; \
-    vm->regs->types[dest] = (TAG); \
-    vm->regs->payloads[dest].FIELD = vm->regs->payloads[lhs].FIELD OP vm->regs->payloads[rhs].FIELD; \
-} while (0)
-
-#define CMPOP_TYPED(TAG, FIELD, OP) do { \
-    u32 dest, lhs, rhs; \
-    if (!binop_indices(vm, ins, &dest, &lhs, &rhs)) return false; \
-    if (!require_type(vm, lhs, (TAG)) || !require_type(vm, rhs, (TAG))) return false; \
-    vm->regs->types[dest] = BOOL; \
-    vm->regs->payloads[dest].u = (vm->regs->payloads[lhs].FIELD OP vm->regs->payloads[rhs].FIELD) ? 1u : 0u; \
-} while (0)
-
-#define UNOP_TYPED(TAG, FIELD, OP) do { \
-    u32 idx; \
-    if (!unary_index(vm, ins, &idx)) return false; \
-    if (!require_type(vm, idx, (TAG))) return false; \
-    vm->regs->types[idx] = (TAG); \
-    vm->regs->payloads[idx].FIELD = OP vm->regs->payloads[idx].FIELD; \
-} while (0)
-
-// conversion helper (dest = op_a, src = op_b)
-#define CAST_TYPED(SRC_TAG, SRC_FIELD, DST_TAG, DST_FIELD, EXPR) do { \
-    u32 dest = op_a(ins) + vm->current->base; \
-    u32 src  = op_b(ins) + vm->current->base; \
-    u32 need = (dest > src ? dest : src) + 1; \
-    if (!ensure_regs(vm, need)) return false; \
-    if (!require_type(vm, src, (SRC_TAG))) return false; \
-    vm->regs->types[dest] = (DST_TAG); \
-    vm->regs->payloads[dest].DST_FIELD = (EXPR); \
-} while (0)
-
-// aliases for typed ops to remove some clutter
-#define BINOP_I64(OP) BINOP_TYPED(I64, i, OP)
-#define BINOP_U64(OP) BINOP_TYPED(U64, u, OP)
-#define BINOP_F32(OP) BINOP_TYPED(FLOAT, f, OP)
-#define BINOP_F64(OP) BINOP_TYPED(DOUBLE, d, OP)
-
-#define CMPOP_I64(OP) CMPOP_TYPED(I64, i, OP)
-#define CMPOP_U64(OP) CMPOP_TYPED(U64, u, OP)
-#define CMPOP_F32(OP) CMPOP_TYPED(FLOAT, f, OP)
-#define CMPOP_F64(OP) CMPOP_TYPED(DOUBLE, d, OP)
-
-#define UNOP_I64(OP) UNOP_TYPED(I64, i, OP)
-#define UNOP_U64(OP) UNOP_TYPED(U64, u, OP)
-#define UNOP_F32(OP) UNOP_TYPED(FLOAT, f, OP)
-#define UNOP_F64(OP) UNOP_TYPED(DOUBLE, d, OP)
 
 // register a native function. may do this a different way
 // Func* vm_new_native(VM* vm, NativeFn fn, u16 argc);

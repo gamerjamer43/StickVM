@@ -222,7 +222,7 @@ static inline bool jump_rel(VM* vm, i32 off) {
 
     // (2 = register overflow)
     if (next < 0 || next >= (i64)vm->icount) {
-        vm->panic_code = PANIC_REG_OVERFLOW;
+        vm->panic_code = PANIC_OOB;
         return false;
     }
 
@@ -434,7 +434,7 @@ bool vm_run(VM* vm) {
 
                 // if no pool or out of bounds panic
                 if (!vm->consts || index >= vm->constcount) {
-                    vm->panic_code = PANIC_REG_OVERFLOW;
+                    vm->panic_code = PANIC_OOB;
                     return false;
                 }
 
@@ -453,7 +453,7 @@ bool vm_run(VM* vm) {
 
                 // if no pool or out of bounds panic (really needa fix this name pollution next)
                 if (!vm->globals || index >= vm->globalcount) {
-                    vm->panic_code = PANIC_REG_OVERFLOW;
+                    vm->panic_code = PANIC_OOB;
                     return false;
                 }
 
@@ -471,7 +471,7 @@ bool vm_run(VM* vm) {
                 u32 index = op_b(ins);
 
                 if (!vm->globals || index >= vm->globalcount) {
-                    vm->panic_code = PANIC_REG_OVERFLOW;
+                    vm->panic_code = PANIC_OOB;
                     return false;
                 }
 
