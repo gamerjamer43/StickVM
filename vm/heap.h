@@ -26,6 +26,14 @@
 // a bump allocator (which is the cost for better handling)
 // choice is uncertain. free list might make it easier to make a lighter gc op using threading, though i have to figure out if i can ever avoid the pause
 
+// can only be one of 3 colors: 
+// - white = proven unreachable
+// - gray = proven reachable but pointers not scanned
+// - black = proven reachable and scanned
+#define MARK_WHITE 0
+#define MARK_GRAY  1
+#define MARK_BLACK 2
+
 typedef enum {
     IDLE = 0, // standard gc state, nothing happening.
     MARK,     // mark directly accessible objects (not necessary to go thru heap)
@@ -35,14 +43,13 @@ typedef enum {
     RESUME,   // an "in between" between sweep and idle, allows the program to catch up and the gc to reset its state
 
     // may add incremental/tri color gc
-    // PROCESS, (process gray objects, white = not proven reachable, gray = proven reachable but pointers not scanned, black = proven reachable and scanned)
+    // PROCESS, (process gray objects)
     // REMARK, (for mutations during mark)
 
     // look into weak refs. leave options open
 } GC_STATE;
 
 // forward declare GC and object header, cuz im unsure of what to do quite yet
-typedef struct GC GC;
 typedef struct FieldInfo FieldInfo;
 typedef struct MethodInfo MethodInfo;
 
@@ -86,6 +93,24 @@ typedef struct ObjHeader {
     u8  state;              // 1 byte  - lock state
     u8  generation;         // 1 byte  - gc generation
 } ObjHeader;                // = 16 bytes (one per INSTANCE, div by 8)
+
+typedef struct {
+    // current alloc size
+    size_t allocated;
+
+    // all objects currently managed by the GC
+    ObjHeader *objs;
+    size_t objc;
+
+    // color management
+    ObjHeader **gray;
+    size_t graycount;
+    size_t graycap;
+    GC_STATE state;
+
+    // maybe a VM ref idk yet it's 2 am and i'm tired
+    // VM *vm;
+} GC;
 
 // builtin object types (god i understand why rust has 16 string types now. C ownership interoperability hard)
 typedef struct {
@@ -145,6 +170,13 @@ bool gc_mark(VM *vm, GC* gc);
 bool gc_trace(VM *vm, GC* gc);
 
 /**
+ * sweep every item marked for collection
+ * @param vm the instance of the vm to check
+ * @param gc the gc to check it with
+ */
+bool gc_sweep(VM *vm, GC* gc);
+
+/**
  * allocate a header to the gc, used for tracking an object 
  * @param vm the instance of the vm to check
  * @param gc the gc to check it with
@@ -152,5 +184,24 @@ bool gc_trace(VM *vm, GC* gc);
  * TODO: decide on how to pack all this into a 64 bit val
  */
 bool gc_alloc(VM *vm, GC* gc);
+
+// assorted root shit that i CBA to doc rn
+void gc_add_root(GC *gc, ObjHeader *obj);
+void gc_remove_root(GC *gc, ObjHeader *obj);
+
+// and sweep threshold too (TODO look into potentially capping, tho may not cuz execution stalls...)
+bool gc_at_threshold(GC *gc);
+void gc_adjust_threshold(GC *gc);
+
+// gonna throw these inside GC but this is color management
+// gets the bottom 2 bits to check 0-3 mark (0 means white, 1 means gray, 2 means black, 3 means huh)
+static inline u8 gc_get_color(ObjHeader *obj) {
+    return obj->mark & 0x03;
+}
+
+// sets the mark provided 0-2 (3 is just gonna be unused idk what it'd be for)
+static inline void gc_set_color(ObjHeader *obj, u8 color) {
+    obj->mark = (obj->mark & 0xFC) | color; // assuming color already masked
+}
 
 #endif

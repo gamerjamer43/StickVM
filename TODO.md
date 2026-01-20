@@ -1,5 +1,18 @@
 if anyone has recommendations feel free to hit me up @ [noah@noahmingolel.li](mailto:noah@noahmingolel.li) like it 1996.
 
+## plan
+
+ORDER OF OPERATIONS STARTING TOMORROW (IDC IF YOU BREAK IT. BUT U SHOULD WRITE THE PARSER)
+- parser (hand roll or chumsky, hand rolling seems easier cuz we store a token span and we can just reuse the line helper to stack trace) [STARTED]
+- emitter (basic ops, should just relatively similar as to what i setup for python)
+- vm (check unimplemented opcodes, and add other bullshit)
+- AOT optimizing step (constant folding, string interning, look into others cuz these the only ones i can remember)
+- lowering step? should i use an existing IR framework or? i don't wanna add a compiler quite yet but this makes the workflow much simpler... could potentially use LLVM ir and either emit bytecode or fully compile*
+- JIT step (HARD. have to interoperate with C.)
+- web embed (use cheerp its so light. should be only a 20kb runtime which is fucking insane)
+- fully aot compiled (replacing cheerp with a wasm compiled backend using LLVM and/or cranelift. may do both to target as much as possible)
+
+## backlog
 asap:
 - just write the fucking parser. (deciding on a parser comb or writing one hurts me. i dont think i wanna do a parser gen cuz the combs seem to push butter but gens reduce overhead. LALR or pratt hand written would potentially push faster tho...)
 - get started on the emitter, make it do basic register ops and math
@@ -14,7 +27,7 @@ asap:
 
 decisions:
 - decide on heap model (bump allocator: requires less frees, and best for generational or free list: you can free whenever you want, whenever you alloc more you mark the last word as a pointer to the next areas first word)
-- decide on gc model (likely tricolor generational, mark generations black white or gray and sift during the trace if still needed prove it white, if dropped mark black and next gc cycle sweep)
+- decide on gc model (likely tricolor generational, mark generations black white or gray and sift during the trace if still needed prove it black, if dropped mark white and next gc cycle sweep)
 - decide on lookup model (bitmap seems fine, but i need to know the max U, so prob hashmap)
 - decide on header size (16 bytes with a 40 byte per type header seems fine but i need to logic that too could get it down)
 - decide on another potential Value conversion (do i want to suck up the padding after all that fucking work to store some shit in the remaining 7 bytes)
