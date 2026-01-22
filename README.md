@@ -8,23 +8,26 @@
 </p>
 <p align="center">You can hit people with it, you can burn it, you can dig in the dirt with it. What, you need a swiss army knife?</p>
 <p align="center"><em>A lightweight, register-based bytecode virtual machine written in C.</em></p>
+<p align="center">
+  <strong>This repo is also linked with the <a href="https://github.com/gamerjamer43/stick">Stick Compiler</a>.</strong>
+</p>
 
 ## Table of Contents
 
 - [Introduction](#introduction)
 - [Specs](#specs)
 - [Quickstart](#quickstart)
-<!-- - [Architecture](#architecture) add here -->
 - [Current Instruction Set](#currently-implemented)
 - [File Format](#file-format)
-- [Development logs](#development-logs)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
+<!-- - [Architecture](#architecture) add somewhere -->
 
 ## Introduction
 
 <h3 align="center">StickVM is a simple, stable and fast register VM, with tightly packed 32 bit instructions you make the most out of each operation. The design is meant to be extremely compute light, optimizing for minimal cycle count and low memory footprint wherever possible. This makes it <b>perfect</b> for both embedding in larger projects, and using standalone for raw power. The goal is a clean, portable runtime that's easy to understand and extend.</h3>
-**NOTE: this is heavily in prod, and I am in school, but I'm still goin nuts. List of current stuff on my backlog in [TODO](TODO.md)**
+
+<b align="center">NOTE: this is heavily in prod, and I am in school, but I'm still goin nuts. List of current stuff on my backlog in</b> [TODO](TODO.md)
 
 ## Specs
 
